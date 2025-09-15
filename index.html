@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Juego de la Oca – versión educativa</title>
+<style>
+  :root{
+    --bg:#DFF1FF; --ink:#23323f; --muted:#6b7a88; --brand:#26a69a; --accent:#ff69b4;
+    --tile:#fff; --tile-muted:#eef6ff; --tile-q:#ffd4f0; --tile-safe:#e8ffe8; --tile-bad:#ffe8e8; --shadow:0 6px 18px rgba(0,0,0,.12);
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.3 ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial;}
+  h1,h2,h3{font-weight:800;letter-spacing:.2px}
+  button{cursor:pointer;border:0;border-radius:14px;padding:.8rem 1.1rem;background:var(--brand);color:#fff;box-shadow:var(--shadow)}
+  button[disabled]{opacity:.5;cursor:not-allowed}
+  .wrap{max-width:1200px;margin:0 auto;padding:16px}
+  .card{background:#fff;border-radius:18px;box-shadow:var(--shadow);padding:20px}
+
+  /* ====== Vistas ====== */
+  #menu{display:grid;gap:16px;grid-template-columns:1fr;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .opt{background:var(--tile);border-radius:12px;padding:10px 12px}
+  label{display:inline-flex;gap:8px;align-items:center}
+  input[type="text"], select{padding:.6rem .8rem;border:1px solid #cdd7e0;border-radius:10px}
+  .players-setup{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .player-card{background:var(--tile);border-radius:14px;padding:10px;box-shadow:var(--shadow)}
+
+  /* ====== Juego ====== */
+  #game{display:none;gap:16px;grid-template-columns:1fr 320px}
+  #board{background:linear-gradient(180deg,#ECF8FF, #DBF1FF);border-radius:18px;position:relative;min-height:680px;box-shadow:var(--shadow);overflow:hidden}
+  #boardSvg{width:100%;height:100%;display:block;border-radius:18px}
+  .pawn{position:absolute; width:48px; height:48px; border-radius:12px; border:3px solid #fff; box-shadow:var(--shadow); background-repeat:no-repeat; background-position:0 0; image-rendering:pixelated}
+
+  /* Sidebar */
+  #side{display:flex;flex-direction:column;gap:10px}
+  .hud{background:#fff;border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+  .log{height:260px;overflow:auto;background:var(--tile-muted);border-radius:12px;padding:10px}
+  .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;background:#00000010}
+
+  /* Footer bar */
+  .bar{position:sticky;bottom:0;left:0;right:0;display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:10px}
+  .die{width:42px;height:42px;border-radius:10px;background:#fff;display:grid;place-items:center;box-shadow:var(--shadow);font-weight:800}
+
+  /* Modal */
+  dialog{border:0;border-radius:18px;max-width:680px;width:clamp(320px,80vw,680px);box-shadow:var(--shadow);} 
+  dialog::backdrop{background:rgba(0,0,0,.25)}
+  .q-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .q-opts{display:grid;gap:8px;margin:12px 0}
+  .q-opts button{width:100%;justify-self:stretch;background:#fff;color:var(--ink);border:2px solid transparent}
+  .q-opts button.correct{border-color:#39c16c;background:#eaffef}
+  .q-opts button.wrong{border-color:#e74c3c;background:#ffecec}
+  .small{font-size:.9rem;color:var(--muted)}
+
+  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;clip:rect(0 0 0 0);overflow:hidden}
+
+  /* Dev/Test */
+  #testOut{white-space:pre-wrap;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="card" id="menu" aria-label="Menú inicial">
+    <div>
+      <h1>Juego de la Oca – <span class="badge">versión educativa</span></h1>
+      <p class="small">SPA sin dependencias. Fondo pastel, 50 casillas, preguntas por niveles. Reanuda partidas guardadas.</p>
+    </div>
+    <div class="row">
+      <label class="opt"><input type="radio" name="mode" value="solo" checked> 1 jugador</label>
+      <label class="opt"><input type="radio" name="mode" value="multi"> Multijugador (2–4)</label>
+      <label class="opt">Semilla RNG <input type="text" id="seed" placeholder="opcional" aria-label="Semilla"></label>
+    </div>
+    <div class="players-setup" id="playersSetup" aria-live="polite"></div>
+    <div class="row">
+      <button id="btnStart">Empezar partida</button>
+      <button id="btnContinue" style="display:none;background:#556cd6">Continuar partida</button>
+      <button id="btnWipe" style="background:#e74c3c">Borrar guardado</button>
+      <button id="btnTests" style="background:#6b7a88">Ejecutar tests</button>
+    </div>
+    <details>
+      <summary>Salida de tests</summary>
+      <div id="testOut" class="card"></div>
+    </details>
+  </header>
+
+  <main id="game" class="grid">
+    <section id="board" aria-label="Tablero">
+      <svg id="boardSvg" viewBox="0 0 1149 768" preserveAspectRatio="xMidYMid meet"></svg>
+    </section>
+    <aside id="side">
+      <div class="hud">
+        <h3>Turno</h3>
+        <div id="turnInfo" aria-live="polite">—</div>
+        <div class="bar">
+          <div class="die" id="die" aria-label="Dado" role="img">—</div>
+          <button id="btnRoll" aria-label="Tirar dado (Espacio)">Tirar dado</button>
+        </div>
+      </div>
+      <div class="hud">
+        <h3>Reglas rápidas</h3>
+        <ul class="small">
+          <li>Rebote al pasar de la meta.</li>
+          <li>Queso/Rueda: salta a la siguiente y tira de nuevo.</li>
+          <li>Pozo pierde 1 turno; Cárcel 2 turnos.</li>
+          <li>Lab: vuelve al anterior laberinto (o −3).</li>
+          <li>Pregunta: aciertas → turno extra; fallas → penalización del modo.</li>
+        </ul>
+      </div>
+      <div class="hud">
+        <h3>Historial</h3>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<dialog id="qModal" aria-labelledby="qTitle">
+  <form method="dialog">
+    <div class="q-head">
+      <h3 id="qTitle">Pregunta</h3>
+      <span id="qLevel" class="badge">Nivel 1</span>
+    </div>
+    <div id="qPrompt"></div>
+    <div class="q-opts" id="qOpts"></div>
+    <div class="row">
+      <button value="close" id="qClose">Continuar</button>
+      <span class="small" id="qExplain"></span>
+    </div>
+  </form>
+</dialog>
+
+<div class="sr-only" aria-live="polite" id="live"></div>
+
+<script>
+// ====== FASE 1: Tablero fijo (SVG) con z-index + overlay y posición base en 0 ======
+// TODAS las coordenadas del LAYOUT son top-left con (w,h) exactos
+
+const TILE_SRC = 'assets/img/base.svg';
+const START_SRC = 'assets/img/start_pad.svg';
+const ISLAND_SRC = {
+  'isla-1': 'assets/img/isla-1.svg',
+  'isla-2': 'assets/img/isla-2.svg',
+  'isla-3': 'assets/img/isla-3.svg',
+  'isla-4': 'assets/img/isla-4.svg',
+  'isla-5': 'assets/img/isla-5.svg',
+  'isla-6': 'assets/img/isla-6.svg'
+};
+const SPRITE_URL = 'assets/img/pawns/maus-blue-walk.png';
+const SPRITE_FRAMES = 8, SPRITE_FPS_WALK = 10, SPRITE_PAWN_SIZE = 48;
+const rnd = (max, min=1) => min + Math.floor((crypto.getRandomValues?.(new Uint32Array(1))[0] ?? Math.random()*2**32) / 2**32 * (max-min+1));
+
+// ===== Orden exacto del tablero =====
+const LAYOUT = [
+  {id:'start_pad', kind:'start', x:58.28, y:647.09, w:184.51, h:102.64},
+  {id:'L1', kind:'tile', x:184.11, y:633.18, w:87, h:48},
+  {id:'L2', kind:'tile', x:234.32, y:607.37, w:87, h:48},
+  {id:'isla-1', kind:'island', x:225.65, y:454.72, w:224.23, h:224.23},
+  {id:'L3', kind:'tile', x:392.41, y:584.78, w:87, h:48},
+  {id:'L4', kind:'tile', x:443.23, y:609.99, w:87, h:48},
+  {id:'L5', kind:'tile', x:494.04, y:634.59, w:87, h:48},
+  {id:'P12a', kind:'tile', x:544.86, y:659.80, w:87, h:48},
+  {id:'L6', kind:'tile', x:595.67, y:634.19, w:87, h:48},
+  {id:'L7', kind:'tile', x:645.88, y:608.38, w:87, h:48},
+  {id:'L8', kind:'tile', x:696.50, y:582.57, w:87, h:48},
+  {id:'L9', kind:'tile', x:747.72, y:556.96, w:87, h:48},
+  {id:'isla-2', kind:'island', x:761.83, y:393.62, w:215.56, h:236.54},
+  {id:'L10', kind:'tile', x:750.00, y:482.00, w:87, h:48},
+  {id:'L11', kind:'tile', x:700.00, y:456.00, w:87, h:48},
+  {id:'L12', kind:'tile', x:649.00, y:430.00, w:87, h:48},
+  {id:'L13', kind:'tile', x:598.00, y:405.00, w:87, h:48},
+  {id:'isla-3', kind:'island', x:461.17, y:258.92, w:206.69, h:206.69},
+  {id:'L14', kind:'tile', x:432.94, y:397.65, w:87, h:48},
+  {id:'P34a', kind:'tile', x:382.13, y:423.26, w:87, h:48},
+  {id:'L15', kind:'tile', x:331.51, y:398.06, w:87, h:48},
+  {id:'isla-4', kind:'island', x:83.48, y:238.55, w:201.65, h:200.04},
+  {id:'L16', kind:'tile', x:280.90, y:372.85, w:87, h:48},
+  {id:'L17', kind:'tile', x:230.49, y:347.44, w:87, h:48},
+  {id:'isla-5', kind:'island', x:327.08, y:59.49, w:202.29, h:223.06},
+  {id:'L18', kind:'tile', x:229.28, y:272.03, w:87, h:48},
+  {id:'L19', kind:'tile', x:280.50, y:246.42, w:87, h:48},
+  {id:'L20', kind:'tile', x:331.51, y:220.81, w:87, h:48},
+  {id:'L21', kind:'tile', x:470.65, y:150.43, w:87, h:48},
+  {id:'L22', kind:'tile', x:522.07, y:125.02, w:87, h:48},
+  {id:'P56a', kind:'tile', x:572.28, y:99.21,  w:87, h:48},
+  {id:'L23', kind:'tile', x:623.50, y:124.62, w:87, h:48},
+  {id:'L24', kind:'tile', x:674.12, y:150.43, w:87, h:48},
+  {id:'L25', kind:'tile', x:724.93, y:176.24, w:87, h:48},
+  {id:'L26', kind:'tile', x:775.34, y:202.05, w:87, h:48},
+  {id:'P56b', kind:'tile', x:827.77, y:227.26, w:87, h:48},
+  {id:'L27', kind:'tile', x:878.59, y:201.45, w:87, h:48},
+  {id:'isla-6', kind:'island', x:891.70, y:58.08,  w:203.26, h:203.26}
+];
+
+// ===== Z-index (pintaremos en orden ascendente; lo último queda arriba) =====
+const Z = {
+  'start_pad':1,
+  'L1':2,'L2':3,'isla-1':0,'L3':3,'L4':0,'L5':0,'P12a':0,'L6':0,'L7':0,'L8':0,'L9':3,
+  'isla-2':1,'L10':0,'L11':0,'L12':0,'L13':3,'isla-3':0,'L14':3,'P34a':3,'L15':3,
+  'L16':3,'L17':3,'isla-4':2,'L18':0,'L19':0,'L20':3,'isla-5':2,
+  'L21':0,'L22':0,'P56a':0,'L23':0,'L24':0,'L25':0,'L26':0,'P56b':0,'L27':3,
+  'isla-6':0
+};
+
+// ===== Estado =====
+let state = null; // { players:[{id,name,pos}], currentIdx }
+let overlayOn = false;
+
+// ===== Helpers SVG =====
+function svgImage(href, x, y, w, h){
+  const img = document.createElementNS('http://www.w3.org/2000/svg','image');
+  img.setAttributeNS('http://www.w3.org/1999/xlink','href', href);
+  img.setAttribute('x', x); img.setAttribute('y', y);
+  img.setAttribute('width', w); img.setAttribute('height', h);
+  return img;
+}
+function svgText(x,y,text){
+  const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+  t.setAttribute('font-size','18'); t.setAttribute('font-family','ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial'); t.setAttribute('fill','#23323f');
+  t.textContent = text; return t;
+}
+
+// ===== Render =====
+function renderBoard(){
+  const svg = document.getElementById('boardSvg');
+  svg.setAttribute('viewBox','0 0 1149 768');
+  svg.innerHTML = '';
+
+  // BOARD_COORDS con índice base 0 (pos 0 -> start_pad)
+  window.BOARD_COORDS = LAYOUT.map(it=>({ cx: it.x + it.w/2, cy: it.y + it.h/2 }));
+
+  // Construir draw-list con z
+  const draw = LAYOUT.map(it=>({ id:it.id, x:it.x, y:it.y, w:it.w, h:it.h, z:(Z[it.id] ?? 0), href: (it.kind==='start')? START_SRC : (it.kind==='tile')? TILE_SRC : ISLAND_SRC[it.id] }));
+  draw.sort((a,b)=> a.z - b.z);
+
+  const gAll = document.createElementNS('http://www.w3.org/2000/svg','g'); gAll.id='zstack'; svg.appendChild(gAll);
+  draw.forEach(it=>{ gAll.appendChild(svgImage(it.href, it.x, it.y, it.w, it.h)); });
+
+  // Overlay opcional
+  drawOverlay(svg);
+}
+
+function drawOverlay(svg){
+  // Toggle con tecla "O"
+  let old = document.getElementById('overlay'); if(old) old.remove();
+  if(!overlayOn) return;
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g'); g.id='overlay'; svg.appendChild(g);
+  // Numeración en el orden del tablero (coincide con índice de LAYOUT)
+  window.BOARD_COORDS.forEach((c,i)=>{ g.appendChild(svgText(c.cx, c.cy, String(i))); });
+}
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key.toLowerCase()==='o'){
+    overlayOn = !overlayOn; drawOverlay(document.getElementById('boardSvg'));
+  }
+});
+
+// ===== Peones (pos 0 -> start_pad) =====
+function placePawn(p){
+  const coords = window.BOARD_COORDS || [];
+  if(!coords.length) return;
+  const idx = Math.max(0, Math.min(coords.length-1, (p.pos|0))); // ahora SIN -1
+  const {cx,cy} = coords[idx];
+  let el = document.getElementById('pawn-'+p.id);
+  if(!el){
+    el = document.createElement('div'); el.id='pawn-'+p.id; el.className='pawn';
+    el.style.width = SPRITE_PAWN_SIZE+'px'; el.style.height = SPRITE_PAWN_SIZE+'px';
+    el.style.backgroundImage = `url(${SPRITE_URL})`;
+    el.style.backgroundSize = (SPRITE_PAWN_SIZE*SPRITE_FRAMES)+'px '+SPRITE_PAWN_SIZE+'px';
+    el.style.backgroundPosition = '0px 0px';
+    document.getElementById('board').appendChild(el);
+  }
+  el.style.transform = `translate(${(cx - SPRITE_PAWN_SIZE/2)}px, ${(cy - SPRITE_PAWN_SIZE/2)}px)`;
+}
+function startWalk(el){ if(!el) return; clearInterval(el._timer); let f=0; el._timer=setInterval(()=>{ el.style.backgroundPosition = `-${f*SPRITE_PAWN_SIZE}px 0`; f=(f+1)%SPRITE_FRAMES; }, 1000/SPRITE_FPS_WALK); }
+function stopWalk(el){ if(el&&el._timer) clearInterval(el._timer); }
+async function moveSteps(p,steps){
+  startWalk(document.getElementById('pawn-'+p.id));
+  const last = window.BOARD_COORDS.length-1;
+  let target = Math.max(0, Math.min(last, p.pos + steps));
+  while(p.pos !== target){ p.pos += (p.pos<target?1:-1); placePawn(p); await new Promise(r=>setTimeout(r,110)); }
+  stopWalk(document.getElementById('pawn-'+p.id));
+}
+async function roll(){
+  const p = state.players[state.currentIdx];
+  const dieEl = document.getElementById('die');
+  dieEl.textContent='…'; let c=0; await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
+  const n = 1 + Math.floor(Math.random()*6); dieEl.textContent=n;
+  await moveSteps(p,n);
+}
+
+// ===== Tests (actualizados a índice base 0) =====
+function runTests(){
+  const out=[]; const ok=(name,cond)=> out.push(`${cond?'✅':'❌'} ${name}`);
+  renderBoard();
+  ok('BOARD_COORDS == LAYOUT', (window.BOARD_COORDS||[]).length===LAYOUT.length);
+  // pos 0 -> start_pad
+  state={players:[{id:'1',name:'J1',pos:0}],currentIdx:0}; placePawn(state.players[0]);
+  ok('Jugador inicia en pos 0 (start_pad)', state.players[0].pos===0);
+  // overlay toggle
+  const svg=document.getElementById('boardSvg'); overlayOn=true; drawOverlay(svg);
+  ok('Overlay creado', !!document.getElementById('overlay'));
+  overlayOn=false; drawOverlay(svg); ok('Overlay oculto', !document.getElementById('overlay'));
+  // tests adicionales
+  const approx=(a,b)=>Math.abs(a-b)<0.01;
+  const first=LAYOUT[0];
+  ok('start_pad es el primer item', first.id==='start_pad');
+  ok('isla-6 es el último item', LAYOUT[LAYOUT.length-1].id==='isla-6');
+  ok('Centro start_pad coincide', approx(window.BOARD_COORDS[0].cx, first.x+first.w/2) && approx(window.BOARD_COORDS[0].cy, first.y+first.h/2));
+  let threw=false; try{ placePawn({id:'X',name:'X',pos:-999}); }catch(e){ threw=true; }
+  ok('placePawn fuera de rango no lanza', !threw);
+  document.getElementById('testOut').textContent = out.join('\n');
+}
+
+// ===== Arranque UI (1 jugador, pos 0) =====
+(function init(){
+  const playersSetup = document.getElementById('playersSetup');
+  playersSetup.innerHTML = `<div class="player-card"><strong>Jugador 1</strong><div class="small">Índice base 0</div></div>`;
+
+  const btnStart = document.getElementById('btnStart');
+  const btnRoll  = document.getElementById('btnRoll');
+  const btnTests = document.getElementById('btnTests');
+
+  btnStart.onclick = ()=>{
+    state = { players:[{id:'1', name:'J1', pos:0, skipTurns:0}], currentIdx:0 };
+    document.getElementById('menu').style.display='none';
+    const game=document.getElementById('game'); game.style.display='grid';
+    renderBoard();
+    placePawn(state.players[0]);
+  };
+  btnRoll.onclick = roll;
+  btnTests.onclick = runTests;
+})();
+</script>
+</body>
+</html>
