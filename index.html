@@ -23,14 +23,30 @@
   .opt{background:var(--tile);border-radius:12px;padding:10px 12px}
   label{display:inline-flex;gap:8px;align-items:center}
   input[type="text"], select{padding:.6rem .8rem;border:1px solid #cdd7e0;border-radius:10px}
-  .players-setup{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
-  .player-card{background:var(--tile);border-radius:14px;padding:10px;box-shadow:var(--shadow)}
+  .players-setup{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:stretch}
+  .player-card{background:var(--tile);border-radius:14px;padding:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
+  .player-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .player-head strong{font-size:1.05rem}
+  .player-head .badge{font-size:.72rem}
+  .player-card label{display:flex;flex-direction:column;gap:4px;font-size:.9rem;color:var(--muted)}
+  .player-card input,.player-card select{font:inherit;width:100%;box-sizing:border-box}
+  .player-card input{border-radius:10px;border:1px solid #cdd7e0;padding:.55rem .7rem}
+  .player-card select{border-radius:10px;border:1px solid #cdd7e0;padding:.55rem .7rem;background:#fff}
+  .player-card .helper{font-size:.78rem;color:var(--muted)}
+  .player-remove{align-self:flex-end;background:#f87171;color:#fff;padding:.45rem .7rem;border-radius:10px;font-size:.85rem;border:0;cursor:pointer}
+  .player-remove:hover{background:#ef4444}
+  .player-add{border:2px dashed #cfd8e3;border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#f8fbff;color:var(--muted);text-align:center}
+  .player-add button{background:transparent;color:var(--brand);border:2px solid var(--brand);padding:.55rem 1rem;border-radius:12px;font-weight:600}
+  .player-add button:disabled{border-color:#d7dfea;color:#d7dfea}
+  .player-color-chip{display:inline-block;width:16px;height:16px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.6) inset}
+  .turn-label{display:inline-flex;align-items:center;gap:8px}
+  .turn-dot{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.5) inset}
+  .pawn{position:absolute; width:48px; height:48px; border-radius:12px; border:3px solid #fff; box-shadow:var(--shadow); background-repeat:no-repeat; background-position:0 0; image-rendering:pixelated; transition:transform .12s linear}
 
   /* ====== Juego ====== */
   #game{display:none;gap:16px;grid-template-columns:1fr 320px}
   #board{background:linear-gradient(180deg,#ECF8FF, #DBF1FF);border-radius:18px;position:relative;min-height:680px;box-shadow:var(--shadow);overflow:hidden}
   #boardSvg{width:100%;height:100%;display:block;border-radius:18px}
-  .pawn{position:absolute; width:48px; height:48px; border-radius:12px; border:3px solid #fff; box-shadow:var(--shadow); background-repeat:no-repeat; background-position:0 0; image-rendering:pixelated}
 
   /* Sidebar */
   #side{display:flex;flex-direction:column;gap:10px}
@@ -145,9 +161,70 @@ const ISLAND_SRC = {
   'isla-5': 'assets/img/isla-5.svg',
   'isla-6': 'assets/img/isla-6.svg'
 };
-const SPRITE_URL = 'assets/img/pawns/maus-blue-walk.png';
-const SPRITE_FRAMES = 8, SPRITE_FPS_WALK = 10, SPRITE_PAWN_SIZE = 48;
+const SPRITE_PAWN_SIZE = 48;
+const SPRITE_FPS_WALK = 9;
+const MAX_PLAYERS = 4;
+const AI_AUTO_DELAY = 700;
+const STEP_DELAY_MS = 120;
+
+const COLOR_PALETTE = [
+  {id:'cerulean', label:'Azul cielo', fill:'#4ca8ff', accent:'#0b4d8f', face:'#11263f'},
+  {id:'sunset', label:'Mandarina', fill:'#ffb454', accent:'#d46b0b', face:'#4a2200'},
+  {id:'orchid', label:'Violeta', fill:'#c792ff', accent:'#6b3eb7', face:'#2b134d'},
+  {id:'jade', label:'Jade', fill:'#4cd3a1', accent:'#1f8f62', face:'#093d29'}
+];
+const COLOR_LOOKUP = Object.fromEntries(COLOR_PALETTE.map(c=>[c.id,c]));
+const DEFAULT_COLOR = COLOR_PALETTE[0].id;
+const SPRITE_LIBRARY = Object.fromEntries(COLOR_PALETTE.map(c=>[c.id, makeSpriteSet(c)]));
 const rnd = (max, min=1) => min + Math.floor((crypto.getRandomValues?.(new Uint32Array(1))[0] ?? Math.random()*2**32) / 2**32 * (max-min+1));
+
+function makeSpriteSet(spec){
+  const walkFrames = [
+    {body:-1,left:2,right:-2,tilt:-1},
+    {body:0,left:-2,right:2,tilt:1},
+    {body:-1,left:1,right:-1,tilt:-1},
+    {body:0,left:-1,right:1,tilt:1}
+  ];
+  return {
+    idle: buildSprite(spec, [{body:0,left:0,right:0,tilt:0}]),
+    walk: buildSprite(spec, walkFrames, SPRITE_FPS_WALK)
+  };
+}
+
+function buildSprite(spec, frames, fps=0){
+  const size = SPRITE_PAWN_SIZE;
+  const cx = size / 2;
+  const svgFrames = frames.map((frame, index)=>{
+    const offsetX = index * size;
+    const body = frame.body ?? 0;
+    const tilt = frame.tilt ?? 0;
+    const left = frame.left ?? 0;
+    const right = frame.right ?? 0;
+    return `<g transform="translate(${offsetX},0)">
+      <ellipse cx="${cx}" cy="${size-5}" rx="14" ry="5" fill="${spec.accent}" opacity=".35"/>
+      <g transform="translate(0,${body})">
+        <circle cx="${cx}" cy="${cx-10}" r="12" fill="${spec.fill}" stroke="${spec.accent}" stroke-width="2"/>
+        <ellipse cx="${cx}" cy="${cx+8}" rx="16" ry="14" fill="${spec.fill}" stroke="${spec.accent}" stroke-width="2"/>
+        <ellipse cx="${cx}" cy="${cx+4}" rx="9" ry="6" fill="#fff" opacity=".12"/>
+        <circle cx="${cx-10}" cy="${cx-16}" r="5" fill="#fff" opacity=".25"/>
+        <circle cx="${cx-5 + tilt}" cy="${cx-11}" r="2.6" fill="${spec.face}"/>
+        <circle cx="${cx+5 + tilt}" cy="${cx-11}" r="2.6" fill="${spec.face}"/>
+        <path d="M${cx-6+tilt} ${cx-2} Q ${cx+tilt} ${cx+2} ${cx+6+tilt} ${cx-2}" stroke="${spec.face}" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </g>
+      <ellipse cx="${cx-9}" cy="${size-6 + left}" rx="8" ry="4" fill="${spec.accent}" opacity=".9"/>
+      <ellipse cx="${cx+9}" cy="${size-6 + right}" rx="8" ry="4" fill="${spec.accent}" opacity=".9"/>
+    </g>`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size*frames.length}" height="${size}" viewBox="0 0 ${size*frames.length} ${size}">${svgFrames}</svg>`;
+  return { url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg), frames: frames.length, fps };
+}
+
+function escapeHtml(str){
+  const map = {'&':'&amp;','<':'&lt;','>':'&gt;'};
+  map['"'] = '&quot;';
+  map["'"] = '&#39;';
+  return String(str ?? '').replace(/[&<>"']/g, ch=>map[ch]);
+}
 
 // ===== Orden exacto del tablero =====
 const LAYOUT = [
@@ -202,8 +279,15 @@ const Z = {
 };
 
 // ===== Estado =====
-let state = null; // { players:[{id,name,pos}], currentIdx }
+let state = null; // { players:[{id,name,pos,color,type,skipTurns}], currentIdx }
 let overlayOn = false;
+let setupConfig = null;
+let playerIdCounter = 1;
+let isRolling = false;
+let playersSetupEl = null;
+let btnRoll = null;
+let dieEl = null;
+let turnInfoEl = null;
 
 // ===== Helpers SVG =====
 function svgImage(href, x, y, w, h){
@@ -256,37 +340,348 @@ document.addEventListener('keydown', (e)=>{
 });
 
 // ===== Peones (pos 0 -> start_pad) =====
-function placePawn(p){
-  const coords = window.BOARD_COORDS || [];
-  if(!coords.length) return;
-  const idx = Math.max(0, Math.min(coords.length-1, (p.pos|0))); // ahora SIN -1
-  const {cx,cy} = coords[idx];
+function getSpriteForColor(color){
+  return SPRITE_LIBRARY[color] || SPRITE_LIBRARY[DEFAULT_COLOR];
+}
+
+function applySprite(el, sprite){
+  if(!el || !sprite) return;
+  el.style.backgroundImage = sprite.url;
+  el.style.backgroundSize = (SPRITE_PAWN_SIZE * sprite.frames)+'px '+SPRITE_PAWN_SIZE+'px';
+}
+
+function ensurePawnElement(p){
+  const board = document.getElementById('board');
+  if(!board) return null;
+  const colorId = COLOR_LOOKUP[p.color] ? p.color : DEFAULT_COLOR;
+  p.color = colorId;
   let el = document.getElementById('pawn-'+p.id);
   if(!el){
-    el = document.createElement('div'); el.id='pawn-'+p.id; el.className='pawn';
-    el.style.width = SPRITE_PAWN_SIZE+'px'; el.style.height = SPRITE_PAWN_SIZE+'px';
-    el.style.backgroundImage = `url(${SPRITE_URL})`;
-    el.style.backgroundSize = (SPRITE_PAWN_SIZE*SPRITE_FRAMES)+'px '+SPRITE_PAWN_SIZE+'px';
+    el = document.createElement('div');
+    el.id = 'pawn-'+p.id;
+    el.className = 'pawn';
+    el.style.width = SPRITE_PAWN_SIZE+'px';
+    el.style.height = SPRITE_PAWN_SIZE+'px';
+    el.dataset.playerId = String(p.id);
+    el.dataset.walking = '0';
+    el.dataset.color = colorId;
+    applySprite(el, getSpriteForColor(colorId).idle);
     el.style.backgroundPosition = '0px 0px';
-    document.getElementById('board').appendChild(el);
+    board.appendChild(el);
+  }else if(el.dataset.color !== colorId){
+    if(el._timer){ clearInterval(el._timer); el._timer = null; }
+    el.dataset.color = colorId;
+    applySprite(el, getSpriteForColor(colorId).idle);
+    el.style.backgroundPosition = '0px 0px';
   }
-  el.style.transform = `translate(${(cx - SPRITE_PAWN_SIZE/2)}px, ${(cy - SPRITE_PAWN_SIZE/2)}px)`;
+  return el;
 }
-function startWalk(el){ if(!el) return; clearInterval(el._timer); let f=0; el._timer=setInterval(()=>{ el.style.backgroundPosition = `-${f*SPRITE_PAWN_SIZE}px 0`; f=(f+1)%SPRITE_FRAMES; }, 1000/SPRITE_FPS_WALK); }
-function stopWalk(el){ if(el&&el._timer) clearInterval(el._timer); }
-async function moveSteps(p,steps){
-  startWalk(document.getElementById('pawn-'+p.id));
-  const last = window.BOARD_COORDS.length-1;
-  let target = Math.max(0, Math.min(last, p.pos + steps));
-  while(p.pos !== target){ p.pos += (p.pos<target?1:-1); placePawn(p); await new Promise(r=>setTimeout(r,110)); }
-  stopWalk(document.getElementById('pawn-'+p.id));
+
+function clampPosition(pos){
+  const coords = window.BOARD_COORDS || [];
+  if(!coords.length) return 0;
+  if(typeof pos !== 'number' || Number.isNaN(pos)) pos = 0;
+  return Math.max(0, Math.min(coords.length-1, Math.round(pos)));
 }
+
+const OFFSET_PRESETS = {
+  1: [{x:0,y:0}],
+  2: [{x:-12,y:0},{x:12,y:0}],
+  3: [{x:-12,y:-8},{x:12,y:-8},{x:0,y:12}],
+  4: [{x:-14,y:-10},{x:14,y:-10},{x:-14,y:12},{x:14,y:12}]
+};
+
+function offsetsForStack(count){
+  if(OFFSET_PRESETS[count]) return OFFSET_PRESETS[count];
+  const radius = 14;
+  return Array.from({length:count}, (_,i)=>{
+    const angle = (Math.PI*2*i)/count;
+    return {x: Math.round(Math.cos(angle)*radius), y: Math.round(Math.sin(angle)*radius)};
+  });
+}
+
+function layoutPawns(list){
+  const coords = window.BOARD_COORDS || [];
+  if(!coords.length) return;
+  const players = list ?? (state?.players || []);
+  if(!players.length) return;
+  const groups = new Map();
+  players.forEach(p=>{
+    if(!p) return;
+    p.pos = clampPosition(p.pos ?? 0);
+    ensurePawnElement(p);
+    const key = p.pos;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  });
+  groups.forEach((group, idx)=>{
+    const {cx, cy} = coords[idx] || {cx:0, cy:0};
+    const offsets = offsetsForStack(group.length);
+    group.forEach((player, index)=>{
+      const el = document.getElementById('pawn-'+player.id);
+      if(!el) return;
+      const off = offsets[index] || {x:0,y:0};
+      el.style.transform = `translate(${Math.round(cx - SPRITE_PAWN_SIZE/2 + off.x)}px, ${Math.round(cy - SPRITE_PAWN_SIZE/2 + off.y)}px)`;
+      el.style.zIndex = String(10 + idx);
+      if(el.dataset.walking !== '1'){
+        applySprite(el, getSpriteForColor(player.color).idle);
+        el.style.backgroundPosition = '0px 0px';
+      }
+    });
+  });
+}
+
+function placePawn(p){
+  if(!p) return;
+  p.pos = clampPosition(p.pos ?? 0);
+  if(state?.players?.some(pl=>pl.id === p.id)){
+    layoutPawns();
+  }else{
+    layoutPawns([p]);
+  }
+}
+
+function startWalk(p){
+  const el = ensurePawnElement(p);
+  if(!el) return;
+  if(el._timer){ clearInterval(el._timer); }
+  const sprite = getSpriteForColor(p.color).walk;
+  applySprite(el, sprite);
+  el.dataset.walking = '1';
+  el.style.backgroundPosition = '0px 0px';
+  const frames = Math.max(1, sprite.frames || 1);
+  if(frames <= 1){
+    return;
+  }
+  let frame = 0;
+  const fps = sprite.fps || SPRITE_FPS_WALK;
+  el._timer = setInterval(()=>{ frame = (frame + 1) % frames; el.style.backgroundPosition = `-${frame*SPRITE_PAWN_SIZE}px 0`; }, Math.max(30, 1000 / fps));
+}
+
+function stopWalk(p){
+  const el = document.getElementById('pawn-'+p.id);
+  if(!el) return;
+  if(el._timer){ clearInterval(el._timer); el._timer = null; }
+  el.dataset.walking = '0';
+  applySprite(el, getSpriteForColor(p.color).idle);
+  el.style.backgroundPosition = '0px 0px';
+}
+
+async function moveSteps(p, steps){
+  const coords = window.BOARD_COORDS || [];
+  if(!coords.length || !p) return;
+  p.pos = clampPosition(p.pos ?? 0);
+  const target = clampPosition((p.pos ?? 0) + (steps ?? 0));
+  if(target === p.pos){
+    layoutPawns();
+    return;
+  }
+  startWalk(p);
+  while(p.pos !== target){
+    p.pos += (p.pos < target ? 1 : -1);
+    layoutPawns();
+    await new Promise(res=>setTimeout(res, STEP_DELAY_MS));
+  }
+  stopWalk(p);
+  layoutPawns();
+}
+
 async function roll(){
+  if(isRolling || !state?.players?.length) return;
   const p = state.players[state.currentIdx];
-  const dieEl = document.getElementById('die');
-  dieEl.textContent='…'; let c=0; await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
-  const n = 1 + Math.floor(Math.random()*6); dieEl.textContent=n;
+  if(!p) return;
+  isRolling = true;
+  if(btnRoll) btnRoll.disabled = true;
+  const n = rnd(6,1);
+  if(dieEl){
+    dieEl.textContent='…';
+    let c=0;
+    await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
+    dieEl.textContent = n;
+  }
   await moveSteps(p,n);
+  isRolling = false;
+  advanceTurn();
+}
+
+function advanceTurn(){
+  if(!state?.players?.length){
+    updateTurnInfo();
+    return;
+  }
+  const len = state.players.length;
+  let attempts = 0;
+  do{
+    state.currentIdx = (state.currentIdx + 1) % len;
+    const current = state.players[state.currentIdx];
+    if(current?.skipTurns && current.skipTurns > 0){
+      current.skipTurns -= 1;
+      attempts++;
+      continue;
+    }
+    break;
+  }while(attempts < len * 2);
+  updateTurnInfo();
+}
+
+function updateTurnInfo(){
+  if(!turnInfoEl){
+    return;
+  }
+  if(!state?.players?.length){
+    turnInfoEl.textContent = '—';
+    if(btnRoll) btnRoll.disabled = true;
+    return;
+  }
+  const current = state.players[state.currentIdx];
+  if(!current){
+    turnInfoEl.textContent = '—';
+    if(btnRoll) btnRoll.disabled = true;
+    return;
+  }
+  const spec = COLOR_LOOKUP[current.color] || COLOR_LOOKUP[DEFAULT_COLOR];
+  const badge = current.type === 'ai' ? ' <span class="badge">IA</span>' : '';
+  turnInfoEl.innerHTML = `<span class="turn-label"><span class="turn-dot" style="background:${spec.fill}"></span>${escapeHtml(current.name)}${badge}</span>`;
+  if(btnRoll && !isRolling){
+    btnRoll.disabled = current.type === 'ai';
+  }
+  if(current.type === 'ai' && !isRolling){
+    setTimeout(()=>{ if(state && state.players[state.currentIdx] === current){ roll(); } }, AI_AUTO_DELAY);
+  }
+}
+function defaultName(type){
+  const base = type === 'ai' ? 'IA' : 'Jugador';
+  const count = (setupConfig?.players || []).filter(p=>p.type===type).length;
+  return `${base} ${count + 1}`;
+}
+
+function pickColor(preferred, excludeId){
+  const used = new Set((setupConfig?.players || []).filter(p=>p.id !== excludeId).map(p=>p.color));
+  if(preferred && COLOR_LOOKUP[preferred] && !used.has(preferred)){
+    return preferred;
+  }
+  for(const option of COLOR_PALETTE){
+    if(!used.has(option.id)) return option.id;
+  }
+  return (preferred && COLOR_LOOKUP[preferred]) ? preferred : DEFAULT_COLOR;
+}
+
+function createSetupPlayer(type){
+  const player = { id:'p'+(playerIdCounter++), type, name:'', color:DEFAULT_COLOR };
+  player.name = defaultName(type);
+  player.color = pickColor(undefined, player.id);
+  return player;
+}
+
+function ensurePlayersForMode(){
+  if(!setupConfig) return;
+  if(setupConfig.mode === 'solo'){
+    let primary = setupConfig.players.find(p=>p.type==='human');
+    if(!primary){
+      primary = createSetupPlayer('human');
+      setupConfig.players.unshift(primary);
+    }
+    primary.name = primary.name || defaultName('human');
+    const aiPlayers = setupConfig.players.filter(p=>p.type==='ai');
+    setupConfig.players = [primary, ...aiPlayers].slice(0, MAX_PLAYERS);
+  }else{
+    let humans = setupConfig.players.filter(p=>p.type==='human');
+    while(humans.length < 2){
+      const newHuman = createSetupPlayer('human');
+      setupConfig.players.push(newHuman);
+      humans = setupConfig.players.filter(p=>p.type==='human');
+    }
+    setupConfig.players.sort((a,b)=>{
+      if(a.type === b.type) return 0;
+      return a.type === 'human' ? -1 : 1;
+    });
+    setupConfig.players = setupConfig.players.slice(0, MAX_PLAYERS);
+    let idx = 0;
+    setupConfig.players.filter(p=>p.type==='human').forEach(p=>{
+      p.name = p.name?.trim() || `Jugador ${++idx}`;
+    });
+  }
+  setupConfig.players.forEach(p=>{ p.color = pickColor(p.color, p.id); });
+}
+
+function renderPlayersSetup(){
+  if(!playersSetupEl) return;
+  ensurePlayersForMode();
+  const players = setupConfig.players;
+  let humanCounter = 0, aiCounter = 0;
+  const cards = players.map(p=>{
+    const isHuman = p.type !== 'ai';
+    const title = isHuman ? `Jugador ${++humanCounter}` : `IA ${++aiCounter}`;
+    p.name = p.name?.trim() || defaultName(p.type);
+    p.color = pickColor(p.color, p.id);
+    const usedByOthers = new Set(players.filter(other=>other.id!==p.id).map(other=>other.color));
+    const options = COLOR_PALETTE.map(opt=>{
+      const disabled = usedByOthers.has(opt.id) ? ' disabled' : '';
+      const selected = p.color === opt.id ? ' selected' : '';
+      return `<option value="${opt.id}"${selected}${disabled}>${opt.label}</option>`;
+    }).join('');
+    const colorFill = (COLOR_LOOKUP[p.color] || COLOR_LOOKUP[DEFAULT_COLOR]).fill;
+    const removeBtn = (!isHuman && players.length > 1) ? `<button type="button" class="player-remove" data-action="remove" data-id="${p.id}">Quitar IA</button>` : '';
+    return `<div class="player-card" data-id="${p.id}"><div class="player-head"><div><strong>${title}</strong><div class="helper">${isHuman?'Controlado por una persona':'Controlado por la máquina'}</div></div>${removeBtn}</div><label>Nombre<input type="text" value="${escapeHtml(p.name)}" data-field="name" data-id="${p.id}" placeholder="${isHuman?'Jugador':''}"></label><label>Color<select data-field="color" data-id="${p.id}">${options}</select></label><div class="helper">Color actual <span class="player-color-chip" style="background:${colorFill}"></span></div></div>`;
+  }).join('');
+  const canAddAi = players.length < MAX_PLAYERS;
+  const addCard = `<div class="player-card player-add"><div>¿Quieres practicar contra la computadora?</div><button type="button" data-action="add-ai" ${canAddAi?'':'disabled'}>Añadir IA</button></div>`;
+  playersSetupEl.innerHTML = cards + addCard;
+  playersSetupEl.querySelectorAll('input[data-field="name"]').forEach(input=>{
+    input.addEventListener('input', (ev)=>{
+      const id = ev.target.dataset.id;
+      const player = setupConfig.players.find(p=>p.id===id);
+      if(player){ player.name = ev.target.value; }
+    });
+  });
+  playersSetupEl.querySelectorAll('select[data-field="color"]').forEach(select=>{
+    select.addEventListener('change', (ev)=>{
+      const id = ev.target.dataset.id;
+      const player = setupConfig.players.find(p=>p.id===id);
+      if(player){
+        player.color = pickColor(ev.target.value, player.id);
+        renderPlayersSetup();
+      }
+    });
+  });
+  playersSetupEl.querySelectorAll('button[data-action="remove"]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const id = ev.target.dataset.id;
+      setupConfig.players = setupConfig.players.filter(p=>p.id !== id);
+      renderPlayersSetup();
+    });
+  });
+  const addBtn = playersSetupEl.querySelector('button[data-action="add-ai"]');
+  if(addBtn){
+    addBtn.addEventListener('click', ()=>{
+      if(setupConfig.players.length >= MAX_PLAYERS) return;
+      const ai = createSetupPlayer('ai');
+      setupConfig.players.push(ai);
+      renderPlayersSetup();
+    });
+  }
+}
+
+function startGame(){
+  ensurePlayersForMode();
+  const players = setupConfig.players.map((entry, idx)=>({
+    id: entry.id,
+    name: (entry.name || '').trim() || defaultName(entry.type),
+    color: pickColor(entry.color, entry.id),
+    type: entry.type,
+    pos:0,
+    skipTurns:0
+  }));
+  if(!players.length) return;
+  state = { players, currentIdx:0 };
+  isRolling = false;
+  document.querySelectorAll('#board .pawn').forEach(el=>{ if(el._timer) clearInterval(el._timer); el.remove(); });
+  const menu = document.getElementById('menu'); if(menu) menu.style.display='none';
+  const game = document.getElementById('game'); if(game) game.style.display='grid';
+  renderBoard();
+  layoutPawns();
+  if(dieEl) dieEl.textContent = '—';
+  updateTurnInfo();
 }
 
 // ===== Tests (actualizados a índice base 0) =====
@@ -294,42 +689,58 @@ function runTests(){
   const out=[]; const ok=(name,cond)=> out.push(`${cond?'✅':'❌'} ${name}`);
   renderBoard();
   ok('BOARD_COORDS == LAYOUT', (window.BOARD_COORDS||[]).length===LAYOUT.length);
-  // pos 0 -> start_pad
-  state={players:[{id:'1',name:'J1',pos:0}],currentIdx:0}; placePawn(state.players[0]);
-  ok('Jugador inicia en pos 0 (start_pad)', state.players[0].pos===0);
-  // overlay toggle
+  const colorB = COLOR_PALETTE[1]?.id || COLOR_PALETTE[0].id;
+  state = { players:[
+    {id:'T1', name:'P1', pos:0, color:COLOR_PALETTE[0].id, type:'human', skipTurns:0},
+    {id:'T2', name:'P2', pos:0, color:colorB, type:'human', skipTurns:0}
+  ], currentIdx:0 };
+  layoutPawns();
+  const p1El = document.getElementById('pawn-T1');
+  const p2El = document.getElementById('pawn-T2');
+  ok('Se crean dos peones', !!p1El && !!p2El);
+  ok('Peones apilados ajustan posición', !!p1El && !!p2El && p1El.style.transform !== p2El.style.transform);
+  state.players[1].pos = 5;
+  layoutPawns();
+  ok('Mover peón actualiza la posición', state.players[1].pos === 5);
+  let threw=false; try{ placePawn({id:'X',name:'X',pos:-999,color:COLOR_PALETTE[0].id}); }catch(e){ threw=true; }
+  ok('placePawn fuera de rango no lanza', !threw);
   const svg=document.getElementById('boardSvg'); overlayOn=true; drawOverlay(svg);
   ok('Overlay creado', !!document.getElementById('overlay'));
   overlayOn=false; drawOverlay(svg); ok('Overlay oculto', !document.getElementById('overlay'));
-  // tests adicionales
   const approx=(a,b)=>Math.abs(a-b)<0.01;
   const first=LAYOUT[0];
   ok('start_pad es el primer item', first.id==='start_pad');
   ok('isla-6 es el último item', LAYOUT[LAYOUT.length-1].id==='isla-6');
   ok('Centro start_pad coincide', approx(window.BOARD_COORDS[0].cx, first.x+first.w/2) && approx(window.BOARD_COORDS[0].cy, first.y+first.h/2));
-  let threw=false; try{ placePawn({id:'X',name:'X',pos:-999}); }catch(e){ threw=true; }
-  ok('placePawn fuera de rango no lanza', !threw);
   document.getElementById('testOut').textContent = out.join('\n');
+  document.querySelectorAll('#board .pawn').forEach(el=>{ if(el._timer) clearInterval(el._timer); el.remove(); });
+  state = null;
 }
 
 // ===== Arranque UI (1 jugador, pos 0) =====
 (function init(){
-  const playersSetup = document.getElementById('playersSetup');
-  playersSetup.innerHTML = `<div class="player-card"><strong>Jugador 1</strong><div class="small">Índice base 0</div></div>`;
-
+  playersSetupEl = document.getElementById('playersSetup');
+  btnRoll = document.getElementById('btnRoll');
+  dieEl = document.getElementById('die');
+  turnInfoEl = document.getElementById('turnInfo');
   const btnStart = document.getElementById('btnStart');
-  const btnRoll  = document.getElementById('btnRoll');
   const btnTests = document.getElementById('btnTests');
-
-  btnStart.onclick = ()=>{
-    state = { players:[{id:'1', name:'J1', pos:0, skipTurns:0}], currentIdx:0 };
-    document.getElementById('menu').style.display='none';
-    const game=document.getElementById('game'); game.style.display='grid';
-    renderBoard();
-    placePawn(state.players[0]);
-  };
-  btnRoll.onclick = roll;
-  btnTests.onclick = runTests;
+  setupConfig = { mode:'solo', players:[createSetupPlayer('human')] };
+  ensurePlayersForMode();
+  renderPlayersSetup();
+  document.querySelectorAll('input[name="mode"]').forEach(radio=>{
+    radio.addEventListener('change', (ev)=>{
+      if(!ev.target.checked) return;
+      setupConfig.mode = ev.target.value;
+      ensurePlayersForMode();
+      renderPlayersSetup();
+    });
+  });
+  if(btnStart) btnStart.onclick = startGame;
+  if(btnRoll) btnRoll.onclick = ()=>roll();
+  if(btnTests) btnTests.onclick = runTests;
+  if(dieEl) dieEl.textContent = '—';
+  updateTurnInfo();
 })();
 </script>
 </body>
