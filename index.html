@@ -131,6 +131,7 @@
 
 <div class="sr-only" aria-live="polite" id="live"></div>
 
+<script src="questions.js"></script>
 <script>
 // ====== FASE 1: Tablero fijo (SVG) con z-index + overlay y posición base en 0 ======
 // TODAS las coordenadas del LAYOUT son top-left con (w,h) exactos
@@ -202,8 +203,125 @@ const Z = {
 };
 
 // ===== Estado =====
-let state = null; // { players:[{id,name,pos}], currentIdx }
+let state = null; // { players:[{id,name,pos,skipTurns}], currentIdx, usedQuestionIds }
 let overlayOn = false;
+
+const menuEl = document.getElementById('menu');
+const gameEl = document.getElementById('game');
+const dieEl = document.getElementById('die');
+const turnInfoEl = document.getElementById('turnInfo');
+const logEl = document.getElementById('log');
+const playersSetup = document.getElementById('playersSetup');
+const btnStart = document.getElementById('btnStart');
+const btnRoll = document.getElementById('btnRoll');
+const btnTests = document.getElementById('btnTests');
+
+const qModal = document.getElementById('qModal');
+const qTitle = document.getElementById('qTitle');
+const qLevel = document.getElementById('qLevel');
+const qPrompt = document.getElementById('qPrompt');
+const qOpts = document.getElementById('qOpts');
+const qExplain = document.getElementById('qExplain');
+const qClose = document.getElementById('qClose');
+
+let questionResolver = null;
+let questionContext = null;
+
+qModal.addEventListener('cancel', (e)=>{ e.preventDefault(); });
+qClose.addEventListener('click', (e)=>{ if(qClose.disabled) e.preventDefault(); });
+
+function resetQuestionModal(){
+  qTitle.textContent = 'Pregunta';
+  qLevel.textContent = 'Nivel';
+  qPrompt.textContent = '';
+  qOpts.innerHTML = '';
+  qExplain.textContent = '';
+  qClose.disabled = true;
+  qClose.dataset.outcome = '';
+  qClose.textContent = 'Continuar';
+  qModal.dataset.locked = '';
+}
+
+function handleOptionSelection(idx){
+  if(!questionContext || qModal.dataset.locked === 'true') return;
+  const { question } = questionContext;
+  qModal.dataset.locked = 'true';
+  const correctIdx = question.answer;
+  const isCorrect = idx === correctIdx;
+  const buttons = Array.from(qOpts.querySelectorAll('button'));
+  buttons.forEach((btn, i)=>{
+    btn.disabled = true;
+    if(i === correctIdx) btn.classList.add('correct');
+    else if(i === idx) btn.classList.add('wrong');
+  });
+  const base = isCorrect ? (question.feedback?.correct || '¡Correcto! Obtienes un turno extra.') : (question.feedback?.incorrect || 'Respuesta incorrecta. Pierdes un turno.');
+  const detail = question.explain ? ` ${question.explain}` : '';
+  qExplain.textContent = base + detail;
+  qClose.disabled = false;
+  qClose.dataset.outcome = isCorrect ? 'correct' : 'wrong';
+  qClose.textContent = isCorrect ? 'Aplicar turno extra' : 'Aplicar penalización';
+  qClose.focus();
+}
+
+function showQuestionModal(question, level){
+  return new Promise((resolve)=>{
+    questionResolver = resolve;
+    questionContext = { question, level };
+    resetQuestionModal();
+    qTitle.textContent = question.category || 'Pregunta';
+    qLevel.textContent = `Nivel ${level}`;
+    qPrompt.textContent = question.prompt;
+    question.options.forEach((opt, idx)=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = opt;
+      btn.addEventListener('click', ()=> handleOptionSelection(idx));
+      qOpts.appendChild(btn);
+    });
+    qModal.showModal();
+  });
+}
+
+qModal.addEventListener('close', ()=>{
+  if(questionResolver){
+    const outcome = qClose.dataset.outcome || 'none';
+    questionResolver({ outcome, question: questionContext?.question || null, level: questionContext?.level || null });
+  }
+  questionResolver = null;
+  questionContext = null;
+  resetQuestionModal();
+});
+
+function appendLog(text){
+  if(!logEl) return;
+  const entry = document.createElement('div');
+  entry.textContent = text;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+  if(state){
+    state.log = state.log || [];
+    state.log.push(text);
+  }
+}
+
+function describePosition(pos, withArticle=false){
+  if(pos <= 0) return withArticle ? 'la salida' : 'salida';
+  return withArticle ? `la casilla ${pos}` : `casilla ${pos}`;
+}
+
+function updateTurnInfo(){
+  if(!turnInfoEl){ return; }
+  if(!state){ turnInfoEl.textContent = '—'; return; }
+  const player = state.players?.[state.currentIdx];
+  if(!player){ turnInfoEl.textContent = '—'; return; }
+  const base = `${player.name} • ${describePosition(player.pos)}`;
+  if(player.skipTurns && player.skipTurns > 0){
+    const plural = player.skipTurns === 1 ? '' : 's';
+    turnInfoEl.textContent = `${base} — penalización: ${player.skipTurns} turno${plural}`;
+  }else{
+    turnInfoEl.textContent = base;
+  }
+}
 
 // ===== Helpers SVG =====
 function svgImage(href, x, y, w, h){
@@ -281,12 +399,77 @@ async function moveSteps(p,steps){
   while(p.pos !== target){ p.pos += (p.pos<target?1:-1); placePawn(p); await new Promise(r=>setTimeout(r,110)); }
   stopWalk(document.getElementById('pawn-'+p.id));
 }
-async function roll(){
-  const p = state.players[state.currentIdx];
-  const dieEl = document.getElementById('die');
-  dieEl.textContent='…'; let c=0; await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
-  const n = 1 + Math.floor(Math.random()*6); dieEl.textContent=n;
-  await moveSteps(p,n);
+async function roll(player){
+  if(!player) return 0;
+  dieEl.textContent='…';
+  let c=0;
+  await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
+  const n = 1 + Math.floor(Math.random()*6);
+  dieEl.textContent=n;
+  await moveSteps(player,n);
+  return n;
+}
+
+async function resolveTile(player){
+  if(!player || player.pos <= 0 || !window.QuestionBank){
+    return { extraTurn:false };
+  }
+  const { level, question } = QuestionBank.getQuestionForPosition(player.pos, state?.usedQuestionIds);
+  if(!question){
+    return { extraTurn:false };
+  }
+  const store = state?.usedQuestionIds?.[level];
+  if(Array.isArray(store) && !store.includes(question.id)){
+    store.push(question.id);
+  }
+  const result = await showQuestionModal(question, level);
+  if(result.outcome === 'correct'){
+    appendLog(`${player.name} acierta la pregunta de nivel ${level}. Gana un turno extra.`);
+    updateTurnInfo();
+    return { extraTurn:true };
+  }
+  if(result.outcome === 'wrong'){
+    player.skipTurns = Math.max(player.skipTurns || 0, 1);
+    appendLog(`${player.name} falla la pregunta de nivel ${level}. Pierde un turno.`);
+    updateTurnInfo();
+  }
+  return { extraTurn:false };
+}
+
+function advanceTurn(){
+  if(!state || !Array.isArray(state.players) || !state.players.length) return;
+  state.currentIdx = (state.currentIdx + 1) % state.players.length;
+  updateTurnInfo();
+}
+
+async function takeTurn(){
+  if(!state || btnRoll.disabled) return;
+  const player = state.players[state.currentIdx];
+  if(!player) return;
+  if(player.skipTurns && player.skipTurns > 0){
+    player.skipTurns -= 1;
+    const reminder = player.skipTurns > 0 ? ` Quedan ${player.skipTurns} turno${player.skipTurns === 1 ? '' : 's'} de penalización.` : ' Puede volver a tirar en su siguiente turno.';
+    appendLog(`${player.name} pierde el turno por penalización.${reminder}`);
+    advanceTurn();
+    return;
+  }
+  btnRoll.disabled = true;
+  let extraTurn = false;
+  try{
+    const rolled = await roll(player);
+    const plural = rolled === 1 ? '' : 's';
+    appendLog(`${player.name} avanza ${rolled} casilla${plural} hasta ${describePosition(player.pos, true)}.`);
+    const resolution = await resolveTile(player);
+    extraTurn = !!resolution.extraTurn;
+  }finally{
+    btnRoll.disabled = false;
+  }
+  if(extraTurn){
+    appendLog(`${player.name} conserva el turno.`);
+    updateTurnInfo();
+  }else{
+    advanceTurn();
+  }
 }
 
 // ===== Tests (actualizados a índice base 0) =====
@@ -295,7 +478,8 @@ function runTests(){
   renderBoard();
   ok('BOARD_COORDS == LAYOUT', (window.BOARD_COORDS||[]).length===LAYOUT.length);
   // pos 0 -> start_pad
-  state={players:[{id:'1',name:'J1',pos:0}],currentIdx:0}; placePawn(state.players[0]);
+  state={players:[{id:'1',name:'J1',pos:0,skipTurns:0}],currentIdx:0,mode:'solo',usedQuestionIds:{1:[],2:[],3:[]},log:[]};
+  placePawn(state.players[0]);
   ok('Jugador inicia en pos 0 (start_pad)', state.players[0].pos===0);
   // overlay toggle
   const svg=document.getElementById('boardSvg'); overlayOn=true; drawOverlay(svg);
@@ -314,22 +498,31 @@ function runTests(){
 
 // ===== Arranque UI (1 jugador, pos 0) =====
 (function init(){
-  const playersSetup = document.getElementById('playersSetup');
   playersSetup.innerHTML = `<div class="player-card"><strong>Jugador 1</strong><div class="small">Índice base 0</div></div>`;
 
-  const btnStart = document.getElementById('btnStart');
-  const btnRoll  = document.getElementById('btnRoll');
-  const btnTests = document.getElementById('btnTests');
-
   btnStart.onclick = ()=>{
-    state = { players:[{id:'1', name:'J1', pos:0, skipTurns:0}], currentIdx:0 };
-    document.getElementById('menu').style.display='none';
-    const game=document.getElementById('game'); game.style.display='grid';
+    const mode = document.querySelector('input[name="mode"]:checked')?.value || 'solo';
+    state = {
+      players:[{id:'1', name:'J1', pos:0, skipTurns:0}],
+      currentIdx:0,
+      mode,
+      usedQuestionIds:{1:[],2:[],3:[]},
+      log:[]
+    };
+    logEl.innerHTML='';
+    menuEl.style.display='none';
+    gameEl.style.display='grid';
     renderBoard();
     placePawn(state.players[0]);
+    dieEl.textContent='—';
+    btnRoll.disabled = false;
+    appendLog('Partida iniciada.');
+    updateTurnInfo();
   };
-  btnRoll.onclick = roll;
+  btnRoll.onclick = takeTurn;
   btnTests.onclick = runTests;
+  btnRoll.disabled = true;
+  updateTurnInfo();
 })();
 </script>
 </body>
