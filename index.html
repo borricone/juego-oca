@@ -159,6 +159,10 @@
     {id:'isla-6', kind:'island', x:891.70, y:58.08,  w:203.26, h:203.26}
   ];
 
+// <<<<<<< codex/create-game-board-structure-and-rules
+<script>
+// ====== Datos base del tablero (layout SVG + casillas jugables) ======
+//=======
   var Z={
     'start_pad':1,
     'L1':2,'L2':3,'isla-1':0,'L3':3,'L4':0,'L5':0,'P12a':0,'L6':0,'L7':0,'L8':0,'L9':3,
@@ -175,6 +179,7 @@
   ];
 
 // <<<<<<< codex/add-player-setup-for-human-players
+//>>>>>>> main
 const TILE_SRC = 'assets/img/base.svg';
 const START_SRC = 'assets/img/start_pad.svg';
 const ISLAND_SRC = {
@@ -185,6 +190,12 @@ const ISLAND_SRC = {
   'isla-5': 'assets/img/isla-5.svg',
   'isla-6': 'assets/img/isla-6.svg'
 };
+// <<<<<<< codex/create-game-board-structure-and-rules
+const SPRITE_URL = 'assets/img/pawns/maus-r-NE.png';
+const SPRITE_FRAMES = 1, SPRITE_FPS_WALK = 10, SPRITE_PAWN_SIZE = 48;
+const PAWN_COLORS = ['#4b8bbe','#f18f01'];
+
+//=======
 const SPRITE_PAWN_SIZE = 48;
 const SPRITE_FPS_WALK = 9;
 const MAX_PLAYERS = 4;
@@ -251,6 +262,7 @@ function escapeHtml(str){
 }
 
 // ===== Orden exacto del tablero =====
+//>>>>>>> main
 const LAYOUT = [
   {id:'start_pad', kind:'start', x:58.28, y:647.09, w:184.51, h:102.64},
   {id:'L1', kind:'tile', x:184.11, y:633.18, w:87, h:48},
@@ -306,6 +318,162 @@ const LAYOUT = [
     {x:904,y:192},{x:970,y:150}
   ];
 
+// <<<<<<< codex/create-game-board-structure-and-rules
+const Z = {
+  'start_pad':1,
+  'L1':2,'L2':3,'isla-1':0,'L3':3,'L4':0,'L5':0,'P12a':0,'L6':0,'L7':0,'L8':0,'L9':3,
+  'isla-2':1,'L10':0,'L11':0,'L12':0,'L13':3,'isla-3':0,'L14':3,'P34a':3,'L15':3,
+  'L16':3,'L17':3,'isla-4':2,'L18':0,'L19':0,'L20':3,'isla-5':2,
+  'L21':0,'L22':0,'P56a':0,'L23':0,'L24':0,'L25':0,'L26':0,'P56b':0,'L27':3,
+  'isla-6':0
+};
+
+const BOARD_DEF = [
+  {type:'start', label:'Salida', anchor:'start_pad'},
+  {type:'normal', label:'Casilla 1', anchor:'L1'},
+  {type:'pregunta', label:'Pregunta 1', anchor:'L2', level:1},
+  {type:'queso', label:'Queso 1', anchor:['L2','L3']},
+  {type:'normal', label:'Casilla 3', anchor:'L3'},
+  {type:'rueda', label:'Rueda 1', anchor:'L4'},
+  {type:'pregunta', label:'Pregunta 2', anchor:'L5', level:1},
+  {type:'dados', label:'Dados 1', anchor:'P12a', target:18},
+  {type:'normal', label:'Casilla 6', anchor:['P12a','L6']},
+  {type:'cepo', label:'Cepo 1', anchor:'L6', skip:1},
+  {type:'normal', label:'Casilla 8', anchor:'L7'},
+  {type:'laberinto', label:'Laberinto 1', anchor:'L8'},
+  {type:'pregunta', label:'Pregunta 3', anchor:'L9', level:1},
+  {type:'gato', label:'Gato 1', anchor:['L9','L10']},
+  {type:'normal', label:'Casilla 12', anchor:'L10'},
+  {type:'queso', label:'Queso 2', anchor:'L11'},
+  {type:'normal', label:'Casilla 14', anchor:'L12'},
+  {type:'pregunta', label:'Pregunta 4', anchor:'L13', level:2},
+  {type:'dados', label:'Dados 2', anchor:'L14', target:29},
+  {type:'normal', label:'Casilla 18', anchor:'P34a'},
+  {type:'laberinto', label:'Laberinto 2', anchor:'L15'},
+  {type:'pregunta', label:'Pregunta 5', anchor:'L16', level:2},
+  {type:'rueda', label:'Rueda 2', anchor:'L17'},
+  {type:'normal', label:'Casilla 22', anchor:['L17','L18']},
+  {type:'cepo', label:'Cepo 2', anchor:'L18', skip:2},
+  {type:'normal', label:'Casilla 24', anchor:'L19'},
+  {type:'pregunta', label:'Pregunta 6', anchor:'L20', level:2},
+  {type:'gato', label:'Gato 2', anchor:'L21'},
+  {type:'normal', label:'Casilla 27', anchor:'L22'},
+  {type:'rueda', label:'Rueda 3', anchor:'P56a'},
+  {type:'normal', label:'Casilla 29', anchor:'L23'},
+  {type:'laberinto', label:'Laberinto 3', anchor:['L23','L24']},
+  {type:'pregunta', label:'Pregunta 7', anchor:'L24', level:3},
+  {type:'normal', label:'Casilla 32', anchor:'L25'},
+  {type:'queso', label:'Queso 3', anchor:'L26'},
+  {type:'pregunta', label:'Pregunta 8', anchor:['L26','P56b'], level:3},
+  {type:'normal', label:'Casilla 35', anchor:'P56b'},
+  {type:'meta', label:'Meta', anchor:'L27'}
+];
+
+const QUESTIONS = [
+  {level:1, prompt:'¿Cuánto es 2 + 2?', options:[
+    {text:'3', correct:false, explain:'Suma de dos pares es 4.'},
+    {text:'4', correct:true, explain:'Correcto: 2 + 2 = 4.'},
+    {text:'5', correct:false}
+  ]},
+  {level:1, prompt:'¿Cuál es la letra inicial de “oca”?', options:[
+    {text:'O', correct:true},
+    {text:'A', correct:false},
+    {text:'C', correct:false}
+  ]},
+  {level:2, prompt:'Selecciona el planeta más cercano al Sol.', options:[
+    {text:'Venus', correct:false},
+    {text:'Mercurio', correct:true},
+    {text:'Marte', correct:false}
+  ]},
+  {level:2, prompt:'¿Cuál es el resultado de 3 × 4?', options:[
+    {text:'7', correct:false},
+    {text:'12', correct:true},
+    {text:'10', correct:false}
+  ]},
+  {level:3, prompt:'La capital de Canadá es…', options:[
+    {text:'Toronto', correct:false},
+    {text:'Vancouver', correct:false},
+    {text:'Ottawa', correct:true}
+  ]},
+  {level:3, prompt:'¿Qué científico propuso la teoría de la relatividad?', options:[
+    {text:'Isaac Newton', correct:false},
+    {text:'Albert Einstein', correct:true},
+    {text:'Marie Curie', correct:false}
+  ]}
+];
+
+const GamePhase = Object.freeze({
+  IDLE:'IDLE',
+  DICE_ROLL:'DICE_ROLL',
+  MOVE:'MOVE',
+  ON_TILE:'ON_TILE',
+  END_TURN:'END_TURN',
+  WIN:'WIN'
+});
+
+let state = null;
+let overlayOn = false;
+let layoutCoords = {};
+let boardGeometry = [];
+
+// ===== Utilidades =====
+const rnd = (max, min=1) => min + Math.floor((crypto.getRandomValues?.(new Uint32Array(1))[0] ?? Math.random()*2**32) / 2**32 * (max-min+1));
+
+function svgImage(href, x, y, w, h){
+  const img = document.createElementNS('http://www.w3.org/2000/svg','image');
+  img.setAttributeNS('http://www.w3.org/1999/xlink','href', href);
+  img.setAttribute('x', x); img.setAttribute('y', y);
+  img.setAttribute('width', w); img.setAttribute('height', h);
+  return img;
+}
+
+function svgText(x,y,text){
+  const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+  t.setAttribute('font-size','18'); t.setAttribute('font-family','ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial'); t.setAttribute('fill','#23323f');
+  t.textContent = text; return t;
+}
+
+function buildLayoutCoords(){
+  layoutCoords = {};
+  LAYOUT.forEach(it=>{
+    layoutCoords[it.id] = { cx: it.x + it.w/2, cy: it.y + it.h/2 };
+  });
+}
+
+function resolveAnchor(anchor){
+  if(typeof anchor === 'string'){
+    return layoutCoords[anchor];
+  }
+  if(Array.isArray(anchor)){
+    const points = anchor.map(resolveAnchor).filter(Boolean);
+    const cx = points.reduce((acc,p)=>acc+p.cx,0)/points.length;
+    const cy = points.reduce((acc,p)=>acc+p.cy,0)/points.length;
+    return {cx,cy};
+  }
+  return anchor;
+}
+
+function computeBoardGeometry(){
+  boardGeometry = BOARD_DEF.map((tile, idx)=>{
+    const coord = resolveAnchor(tile.anchor) || {cx:0, cy:0};
+    return {...tile, index:idx, cx:coord.cx, cy:coord.cy};
+  });
+  window.BOARD_GEOMETRY = boardGeometry;
+}
+
+// ===== Render =====
+function renderBoard(){
+  const svg = document.getElementById('boardSvg');
+  svg.setAttribute('viewBox','0 0 1149 768');
+  svg.innerHTML = '';
+
+  buildLayoutCoords();
+  computeBoardGeometry();
+
+  const draw = LAYOUT.map(it=>({ id:it.id, x:it.x, y:it.y, w:it.w, h:it.h, z:(Z[it.id] ?? 0), href: (it.kind==='start')? START_SRC : (it.kind==='tile')? TILE_SRC : ISLAND_SRC[it.id] }));
+  draw.sort((a,b)=> a.z - b.z);
+//=======
   // ===== Posiciones EXACTAS (2 jugadores) =====
   // Cada entrada i: { j1:{x,y}, j2:{x,y} }
   var PAWN_POS_MULTI=[
@@ -406,6 +574,7 @@ let turnInfoEl = null;
 
   // ===== Peón y drag =====
   function pawnSrcFor(player, idx){ var ori = ORI_BY_INDEX[idx] || 'NE'; var set = PAWN_SETS[player.set] || PAWN_SETS.r; return set[ori]; }
+//>>>>>>> main
 
   function getPawnPos(idx, playerIndex){
     if(state && state.players && state.players.length===1 && PAWN_POS[idx]) return PAWN_POS[idx];
@@ -416,6 +585,19 @@ let turnInfoEl = null;
     var it=LAYOUT[idx]; return {x: it.x + it.w/2 - 24, y: it.y + it.h/2 - 24};
   }
 
+// <<<<<<< codex/create-game-board-structure-and-rules
+  drawOverlay(svg);
+}
+
+function drawOverlay(svg){
+  let old = document.getElementById('overlay'); if(old) old.remove();
+  if(!overlayOn) return;
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g'); g.id='overlay'; svg.appendChild(g);
+  boardGeometry.forEach((tile)=>{
+    g.appendChild(svgText(tile.cx, tile.cy, String(tile.index)));
+  });
+}
+//=======
   function placePawn(p){
     var idx=Math.max(0,Math.min(PAWN_POS.length-1,p.pos|0));
     var pawnEl=document.getElementById('pawn-'+p.id);
@@ -433,12 +615,23 @@ let turnInfoEl = null;
 
     var playerIndex = (state && state.players) ? state.players.findIndex(pl=>pl.id===p.id) : 0;
     if(playerIndex<0) playerIndex=0;
+//>>>>>>> main
 
     var pos=getPawnPos(idx, playerIndex);
     var scr=toScreenRect(pos.x,pos.y,0,0);
     var size=48*scr.scale; pawnEl.style.width=size+'px'; pawnEl.style.height=size+'px';
     pawnEl.style.transform='translate('+scr.x+'px,'+scr.y+'px)';
   }
+// <<<<<<< codex/create-game-board-structure-and-rules
+  if(e.key === ' '){
+    e.preventDefault();
+    if(state?.phase === GamePhase.IDLE){ handleRoll(); }
+  }
+});
+
+// ===== Movimiento de peones =====
+function ensurePawnElement(p, idx){
+//=======
 
 // <<<<<<< codex/add-player-setup-for-human-players
 // ===== Peones (pos 0 -> start_pad) =====
@@ -457,6 +650,7 @@ function ensurePawnElement(p){
   if(!board) return null;
   const colorId = COLOR_LOOKUP[p.color] ? p.color : DEFAULT_COLOR;
   p.color = colorId;
+//>>>>>>> main
   let el = document.getElementById('pawn-'+p.id);
   if(!el){
     el = document.createElement('div');
@@ -475,10 +669,149 @@ function ensurePawnElement(p){
     el.dataset.color = colorId;
     applySprite(el, getSpriteForColor(colorId).idle);
     el.style.backgroundPosition = '0px 0px';
+// <<<<<<< codex/create-game-board-structure-and-rules
+    el.style.backgroundColor = PAWN_COLORS[idx % PAWN_COLORS.length];
+    document.getElementById('board').appendChild(el);
+=======
+//>>>>>>> main
   }
   return el;
 }
 
+// <<<<<<< codex/create-game-board-structure-and-rules
+function placePawn(p, idx=0){
+  if(!boardGeometry.length) return;
+  const boardIdx = Math.max(0, Math.min(boardGeometry.length-1, (p.pos|0)));
+  const tile = boardGeometry[boardIdx];
+  const el = ensurePawnElement(p, idx);
+  el.style.transform = `translate(${(tile.cx - SPRITE_PAWN_SIZE/2)}px, ${(tile.cy - SPRITE_PAWN_SIZE/2)}px)`;
+}
+
+function startWalk(el){ if(!el) return; clearInterval(el._timer); let f=0; el._timer=setInterval(()=>{ el.style.backgroundPosition = `-${f*SPRITE_PAWN_SIZE}px 0`; f=(f+1)%Math.max(1,SPRITE_FRAMES); }, 1000/SPRITE_FPS_WALK); }
+function stopWalk(el){ if(el&&el._timer) clearInterval(el._timer); }
+
+async function travelTo(p, targetIdx, pawnIdx){
+  const last = boardGeometry.length-1;
+  targetIdx = Math.max(0, Math.min(last, targetIdx));
+  const el = document.getElementById('pawn-'+p.id);
+  startWalk(el);
+  while(p.pos !== targetIdx){
+    p.pos += (p.pos<targetIdx?1:-1);
+    placePawn(p, pawnIdx);
+    await new Promise(r=>setTimeout(r,110));
+  }
+  stopWalk(el);
+  return boardGeometry[p.pos];
+}
+
+async function movePawnBy(p, steps, pawnIdx){
+  const last = boardGeometry.length-1;
+  let target = p.pos + steps;
+  if(target > last){
+    const overshoot = target - last;
+    target = last - overshoot;
+  }
+  if(target < 0){ target = 0; }
+  return travelTo(p, target, pawnIdx);
+}
+
+// ===== Estado y HUD =====
+function currentPlayer(){
+  if(!state || !state.players.length) return null;
+  return state.players[state.currentIdx];
+}
+
+function updateTurnInfo(){
+  const info = document.getElementById('turnInfo');
+  const player = currentPlayer();
+  if(!player){ info.textContent='—'; return; }
+  const skip = player.skipTurns>0 ? ` · penalización: salta ${player.skipTurns} turno(s)` : '';
+  info.textContent = `${player.name} (${player.pos}/${boardGeometry.length-1})${skip}`;
+}
+
+function updateControls(){
+  const btnRoll = document.getElementById('btnRoll');
+  btnRoll.disabled = !state || state.phase !== GamePhase.IDLE;
+}
+
+function setPhase(newPhase){
+  if(!state) return;
+  state.phase = newPhase;
+  updateTurnInfo();
+  updateControls();
+}
+
+function logEvent(text){
+  const log = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.textContent = text;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+  document.getElementById('live').textContent = text;
+}
+
+function showDieValue(v){
+  document.getElementById('die').textContent = v;
+}
+
+async function animateDie(){
+  const dieEl = document.getElementById('die');
+  dieEl.textContent='…';
+  let c=0;
+  await new Promise(res=>{
+    const t=setInterval(()=>{
+      dieEl.textContent = 1 + (c%6);
+      if(++c>10){ clearInterval(t); res(); }
+    },70);
+  });
+  const n = rnd(6,1);
+  dieEl.textContent = n;
+  state.lastRoll = n;
+  return n;
+}
+
+function nextPlayerIndex(){
+  if(!state || state.players.length<=1) return state?.currentIdx ?? 0;
+  return (state.currentIdx + 1) % state.players.length;
+}
+
+function advanceTurn(){
+  if(!state || !state.players.length) return;
+  if(state.players.length>1){
+    state.currentIdx = nextPlayerIndex();
+  }
+}
+
+function ensurePlayableTurn(){
+  if(!state || !state.players.length) return;
+  let safety = 0;
+  while(true){
+    const player = currentPlayer();
+    if(!player) break;
+    if(player.skipTurns>0){
+      logEvent(`${player.name} pierde el turno. Restan ${player.skipTurns} turno(s).`);
+      player.skipTurns = Math.max(0, player.skipTurns-1);
+      if(state.players.length>1){
+        state.currentIdx = nextPlayerIndex();
+      } else if(player.skipTurns===0){
+        break;
+      }
+      safety++;
+      if(safety>state.players.length*4){ break; }
+      continue;
+    }
+    break;
+  }
+  setPhase(GamePhase.IDLE);
+}
+
+// ===== Lógica de casillas =====
+function findPreviousOfType(type, fromIndex){
+  for(let i=fromIndex-1;i>=0;i--){
+    if(boardGeometry[i].type===type) return i;
+  }
+  return -1;
+//=======
 function clampPosition(pos){
   const coords = window.BOARD_COORDS || [];
   if(!coords.length) return 0;
@@ -784,12 +1117,245 @@ function startGame(){
   layoutPawns();
   if(dieEl) dieEl.textContent = '—';
   updateTurnInfo();
+//>>>>>>> main
 }
 
-// ===== Tests (actualizados a índice base 0) =====
+async function resolveTile(player, pawnIdx, ctx={visited:new Set(), chain:false}){
+  const tile = boardGeometry[player.pos];
+  if(!tile){ return {endTurn:true}; }
+  if(ctx.visited.has(tile.index)){
+    return {endTurn:true};
+  }
+  ctx.visited.add(tile.index);
+
+  logEvent(`${player.name} cae en ${tile.label}.`);
+
+  switch(tile.type){
+    case 'meta':
+      setPhase(GamePhase.WIN);
+      showDieValue('🏁');
+      logEvent(`${player.name} gana la partida.`);
+      return {win:true};
+    case 'queso':
+    case 'rueda': {
+      const extra = tile.type==='queso' ? 'queso' : 'rueda';
+      logEvent(`${player.name} avanza por ${extra} y repite tirada.`);
+      await movePawnBy(player, 1, pawnIdx);
+      const nested = await resolveTile(player, pawnIdx, {...ctx, chain:true});
+      return {...nested, extraRoll:true};
+    }
+    case 'dados': {
+      if(typeof tile.target === 'number' && tile.target !== tile.index){
+        logEvent(`${player.name} salta hasta los dados siguientes.`);
+        await travelTo(player, tile.target, pawnIdx);
+        const nested = await resolveTile(player, pawnIdx, {...ctx, chain:true});
+        return {...nested, extraRoll:true};
+      }
+      return {extraRoll:true};
+    }
+    case 'cepo': {
+      player.skipTurns = Math.max(player.skipTurns, tile.skip ?? 1);
+      logEvent(`${player.name} queda atrapado y perderá ${tile.skip ?? 1} turno(s).`);
+      return {endTurn:true};
+    }
+    case 'laberinto': {
+      const prev = findPreviousOfType('laberinto', tile.index);
+      const target = prev>=0 ? prev : Math.max(0, tile.index-3);
+      if(target !== tile.index){
+        logEvent(`${player.name} regresa por el laberinto.`);
+        await travelTo(player, target, pawnIdx);
+        return {...await resolveTile(player, pawnIdx, {...ctx, chain:true})};
+      }
+      return {endTurn:true};
+    }
+    case 'gato': {
+      logEvent(`${player.name} vuelve al inicio huyendo del gato.`);
+      await travelTo(player, 0, pawnIdx);
+      return {endTurn:true};
+    }
+    case 'pregunta': {
+      const correct = await askQuestion(tile.level ?? 1, tile.label);
+      if(correct){
+        logEvent(`${player.name} acierta la pregunta y obtiene tirada extra.`);
+        return {extraRoll:true};
+      }
+      if(state.mode==='solo'){
+        logEvent(`${player.name} falla y retrocede una casilla.`);
+        await movePawnBy(player, -1, pawnIdx);
+      }else{
+        player.skipTurns = Math.max(player.skipTurns, 1);
+        logEvent(`${player.name} falló y perderá el próximo turno.`);
+      }
+      return {endTurn:true};
+    }
+    default:
+      return {endTurn:true};
+  }
+}
+
+// ===== Preguntas =====
+function pickQuestion(level){
+  const pool = QUESTIONS.filter(q=>q.level===level);
+  return pool.length ? pool[rnd(pool.length)-1] : QUESTIONS[rnd(QUESTIONS.length)-1];
+}
+
+function askQuestion(level, label){
+  return new Promise(resolve=>{
+    const modal = document.getElementById('qModal');
+    const title = document.getElementById('qTitle');
+    const promptEl = document.getElementById('qPrompt');
+    const optsEl = document.getElementById('qOpts');
+    const explainEl = document.getElementById('qExplain');
+    const btnClose = document.getElementById('qClose');
+    const q = pickQuestion(level);
+
+    title.textContent = label || 'Pregunta';
+    document.getElementById('qLevel').textContent = `Nivel ${q.level}`;
+    promptEl.textContent = q.prompt;
+    explainEl.textContent = '';
+    btnClose.disabled = true;
+    optsEl.innerHTML = '';
+
+    let answered = false;
+    let result = false;
+
+    q.options.forEach(opt=>{
+      const btn = document.createElement('button');
+      btn.type='button';
+      btn.textContent = opt.text;
+      btn.onclick = ()=>{
+        if(answered) return;
+        answered = true;
+        result = !!opt.correct;
+        optsEl.querySelectorAll('button').forEach(b=>{
+          b.disabled = true;
+          if(b!==btn){
+            const data = q.options.find(o=>o.text===b.textContent);
+            if(data?.correct){ b.classList.add('correct'); }
+          }
+        });
+        btn.classList.add(opt.correct?'correct':'wrong');
+        if(opt.explain){ explainEl.textContent = opt.explain; }
+        btnClose.disabled = false;
+      };
+      optsEl.appendChild(btn);
+    });
+
+    const onClose = ()=>{
+      modal.removeEventListener('close', onClose);
+      resolve(result);
+    };
+    modal.addEventListener('close', onClose);
+    modal.showModal();
+  });
+}
+
+document.getElementById('qClose').addEventListener('click',(e)=>{
+  const modal = document.getElementById('qModal');
+  if(modal.open){ modal.close(); }
+});
+
+// ===== Bucle de turnos =====
+async function handleRoll(){
+  const player = currentPlayer();
+  if(!state || !player || state.phase !== GamePhase.IDLE) return;
+  setPhase(GamePhase.DICE_ROLL);
+  const roll = await animateDie();
+  if(state.phase === GamePhase.WIN) return;
+  setPhase(GamePhase.MOVE);
+  await movePawnBy(player, roll, state.currentIdx);
+  setPhase(GamePhase.ON_TILE);
+  const outcome = await resolveTile(player, state.currentIdx);
+  if(outcome.win){
+    return;
+  }
+  if(outcome.extraRoll){
+    setPhase(GamePhase.IDLE);
+    return;
+  }
+  setPhase(GamePhase.END_TURN);
+  advanceTurn();
+  ensurePlayableTurn();
+}
+
+// ===== Tests =====
 function runTests(){
   const out=[]; const ok=(name,cond)=> out.push(`${cond?'✅':'❌'} ${name}`);
   renderBoard();
+// <<<<<<< codex/create-game-board-structure-and-rules
+  ok('Board con 38 casillas', boardGeometry.length===38);
+  const typeSet = new Set(boardGeometry.map(t=>t.type));
+  ok('Tipos principales presentes', ['queso','rueda','dados','cepo','laberinto','gato','pregunta','meta'].every(t=>typeSet.has(t)));
+  const dummy = {id:'T', name:'Test', pos:0, skipTurns:0};
+  state = {mode:'solo', players:[dummy], currentIdx:0, phase:GamePhase.IDLE};
+  placePawn(dummy,0);
+  ok('Peón en salida', dummy.pos===0);
+  document.getElementById('testOut').textContent = out.join('\n');
+  movePawnBy(dummy, 6,0).then(()=>{
+    ok('Movimiento con rebote válido', dummy.pos>=0 && dummy.pos<boardGeometry.length);
+    document.getElementById('testOut').textContent = out.join('\n');
+  });
+}
+
+// ===== Arranque UI =====
+function buildPlayerSetup(mode){
+  const wrap = document.getElementById('playersSetup');
+  if(mode==='solo'){
+    wrap.innerHTML = `<div class="player-card"><label>Nombre<input type="text" id="p1" value="J1"></label></div>`;
+  }else{
+    wrap.innerHTML = [1,2].map(i=>`<div class="player-card"><label>Jugador ${i}<input type="text" id="p${i}" value="J${i}"></label></div>`).join('');
+  }
+}
+
+function readPlayers(mode){
+  if(mode==='solo'){
+    const name = document.getElementById('p1').value.trim() || 'Jugador 1';
+    return [{id:'p1', name, pos:0, skipTurns:0}];
+  }
+  const p1 = document.getElementById('p1').value.trim() || 'Jugador 1';
+  const p2 = document.getElementById('p2').value.trim() || 'Jugador 2';
+  return [
+    {id:'p1', name:p1, pos:0, skipTurns:0},
+    {id:'p2', name:p2, pos:0, skipTurns:0}
+  ];
+}
+
+function resetPawns(){
+  document.querySelectorAll('.pawn').forEach(p=>p.remove());
+}
+
+function startGame(){
+  const mode = document.querySelector('input[name="mode"]:checked')?.value || 'solo';
+  state = {
+    mode,
+    players: readPlayers(mode),
+    currentIdx:0,
+    phase:GamePhase.IDLE,
+    lastRoll:null
+  };
+
+  document.getElementById('menu').style.display='none';
+  const game=document.getElementById('game'); game.style.display='grid';
+  document.getElementById('log').innerHTML = '';
+  renderBoard();
+  resetPawns();
+  state.players.forEach((p,idx)=>{ p.pos=0; placePawn(p,idx); });
+  showDieValue('—');
+  logEvent('Nueva partida iniciada.');
+  ensurePlayableTurn();
+}
+
+function setupMenu(){
+  const radios = document.querySelectorAll('input[name="mode"]');
+  radios.forEach(r=>{
+    r.addEventListener('change', ()=>buildPlayerSetup(r.value));
+  });
+  buildPlayerSetup(document.querySelector('input[name="mode"]:checked')?.value || 'solo');
+}
+
+(function init(){
+  setupMenu();
+//=======
   ok('BOARD_COORDS == LAYOUT', (window.BOARD_COORDS||[]).length===LAYOUT.length);
   const colorB = COLOR_PALETTE[1]?.id || COLOR_PALETTE[0].id;
   state = { players:[
@@ -825,6 +1391,7 @@ function runTests(){
   btnRoll = document.getElementById('btnRoll');
   dieEl = document.getElementById('die');
   turnInfoEl = document.getElementById('turnInfo');
+//>>>>>>> main
   const btnStart = document.getElementById('btnStart');
   const btnTests = document.getElementById('btnTests');
   setupConfig = { mode:'solo', players:[createSetupPlayer('human')] };
@@ -843,7 +1410,7 @@ function runTests(){
   if(btnTests) btnTests.onclick = runTests;
   if(dieEl) dieEl.textContent = '—';
   updateTurnInfo();
-=======
+//=======
   function setPendingDestination(player, destIdx){
     state.pending = { playerId: player.id, idx: destIdx };
     var old=document.getElementById('destGlow'); if(old) old.remove();
@@ -857,6 +1424,12 @@ function runTests(){
   }
   function clearPending(){ state.pending=null; var g=document.getElementById('destGlow'); if(g) g.remove(); document.getElementById('btnRoll').disabled=false; }
 
+// <<<<<<< codex/create-game-board-structure-and-rules
+  btnStart.onclick = startGame;
+  btnRoll.onclick = ()=>handleRoll();
+  btnTests.onclick = runTests;
+  btnRoll.disabled = true;
+//=======
   var dragging=false,startX=0,startY=0,origX=0,origY=0,dragEl=null;
   function enableDrag(el,p){
     el.addEventListener('pointerdown',function(ev){
@@ -955,6 +1528,7 @@ function runTests(){
     btnRoll.onclick=roll; btnTests.onclick=runTests;
     document.addEventListener('keydown',function(e){ if((e.key||'').toLowerCase()==='o'){ overlayOn=!overlayOn; drawOverlay(document.getElementById('boardSvg')); }});
   })();
+// >>>>>>> main
 // >>>>>>> main
 })();
 </script>
