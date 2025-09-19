@@ -159,7 +159,11 @@
     {id:'isla-6', kind:'island', x:891.70, y:58.08,  w:203.26, h:203.26}
   ];
 
+//<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
+<script src="questions.js"></script>
+//=======
 // <<<<<<< codex/create-game-board-structure-and-rules
+//>>>>>>> main
 <script>
 // ====== Datos base del tablero (layout SVG + casillas jugables) ======
 //=======
@@ -328,6 +332,10 @@ const Z = {
   'isla-6':0
 };
 
+//<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
+// ===== Estado =====
+let state = null; // { players:[{id,name,pos,skipTurns}], currentIdx, usedQuestionIds }
+//=======
 const BOARD_DEF = [
   {type:'start', label:'Salida', anchor:'start_pad'},
   {type:'normal', label:'Casilla 1', anchor:'L1'},
@@ -412,6 +420,7 @@ const GamePhase = Object.freeze({
 });
 
 let state = null;
+//>>>>>>> main
 let overlayOn = false;
 let layoutCoords = {};
 let boardGeometry = [];
@@ -419,6 +428,127 @@ let boardGeometry = [];
 // ===== Utilidades =====
 const rnd = (max, min=1) => min + Math.floor((crypto.getRandomValues?.(new Uint32Array(1))[0] ?? Math.random()*2**32) / 2**32 * (max-min+1));
 
+//<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
+const menuEl = document.getElementById('menu');
+const gameEl = document.getElementById('game');
+const dieEl = document.getElementById('die');
+const turnInfoEl = document.getElementById('turnInfo');
+const logEl = document.getElementById('log');
+const playersSetup = document.getElementById('playersSetup');
+const btnStart = document.getElementById('btnStart');
+const btnRoll = document.getElementById('btnRoll');
+const btnTests = document.getElementById('btnTests');
+
+const qModal = document.getElementById('qModal');
+const qTitle = document.getElementById('qTitle');
+const qLevel = document.getElementById('qLevel');
+const qPrompt = document.getElementById('qPrompt');
+const qOpts = document.getElementById('qOpts');
+const qExplain = document.getElementById('qExplain');
+const qClose = document.getElementById('qClose');
+
+let questionResolver = null;
+let questionContext = null;
+
+qModal.addEventListener('cancel', (e)=>{ e.preventDefault(); });
+qClose.addEventListener('click', (e)=>{ if(qClose.disabled) e.preventDefault(); });
+
+function resetQuestionModal(){
+  qTitle.textContent = 'Pregunta';
+  qLevel.textContent = 'Nivel';
+  qPrompt.textContent = '';
+  qOpts.innerHTML = '';
+  qExplain.textContent = '';
+  qClose.disabled = true;
+  qClose.dataset.outcome = '';
+  qClose.textContent = 'Continuar';
+  qModal.dataset.locked = '';
+}
+
+function handleOptionSelection(idx){
+  if(!questionContext || qModal.dataset.locked === 'true') return;
+  const { question } = questionContext;
+  qModal.dataset.locked = 'true';
+  const correctIdx = question.answer;
+  const isCorrect = idx === correctIdx;
+  const buttons = Array.from(qOpts.querySelectorAll('button'));
+  buttons.forEach((btn, i)=>{
+    btn.disabled = true;
+    if(i === correctIdx) btn.classList.add('correct');
+    else if(i === idx) btn.classList.add('wrong');
+  });
+  const base = isCorrect ? (question.feedback?.correct || '¡Correcto! Obtienes un turno extra.') : (question.feedback?.incorrect || 'Respuesta incorrecta. Pierdes un turno.');
+  const detail = question.explain ? ` ${question.explain}` : '';
+  qExplain.textContent = base + detail;
+  qClose.disabled = false;
+  qClose.dataset.outcome = isCorrect ? 'correct' : 'wrong';
+  qClose.textContent = isCorrect ? 'Aplicar turno extra' : 'Aplicar penalización';
+  qClose.focus();
+}
+
+function showQuestionModal(question, level){
+  return new Promise((resolve)=>{
+    questionResolver = resolve;
+    questionContext = { question, level };
+    resetQuestionModal();
+    qTitle.textContent = question.category || 'Pregunta';
+    qLevel.textContent = `Nivel ${level}`;
+    qPrompt.textContent = question.prompt;
+    question.options.forEach((opt, idx)=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = opt;
+      btn.addEventListener('click', ()=> handleOptionSelection(idx));
+      qOpts.appendChild(btn);
+    });
+    qModal.showModal();
+  });
+}
+
+qModal.addEventListener('close', ()=>{
+  if(questionResolver){
+    const outcome = qClose.dataset.outcome || 'none';
+    questionResolver({ outcome, question: questionContext?.question || null, level: questionContext?.level || null });
+  }
+  questionResolver = null;
+  questionContext = null;
+  resetQuestionModal();
+});
+
+function appendLog(text){
+  if(!logEl) return;
+  const entry = document.createElement('div');
+  entry.textContent = text;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+  if(state){
+    state.log = state.log || [];
+    state.log.push(text);
+  }
+}
+
+function describePosition(pos, withArticle=false){
+  if(pos <= 0) return withArticle ? 'la salida' : 'salida';
+  return withArticle ? `la casilla ${pos}` : `casilla ${pos}`;
+}
+
+function updateTurnInfo(){
+  if(!turnInfoEl){ return; }
+  if(!state){ turnInfoEl.textContent = '—'; return; }
+  const player = state.players?.[state.currentIdx];
+  if(!player){ turnInfoEl.textContent = '—'; return; }
+  const base = `${player.name} • ${describePosition(player.pos)}`;
+  if(player.skipTurns && player.skipTurns > 0){
+    const plural = player.skipTurns === 1 ? '' : 's';
+    turnInfoEl.textContent = `${base} — penalización: ${player.skipTurns} turno${plural}`;
+  }else{
+    turnInfoEl.textContent = base;
+  }
+}
+
+// ===== Helpers SVG =====
+//=======
+//>>>>>>> main
 function svgImage(href, x, y, w, h){
   const img = document.createElementNS('http://www.w3.org/2000/svg','image');
   img.setAttributeNS('http://www.w3.org/1999/xlink','href', href);
@@ -672,7 +802,7 @@ function ensurePawnElement(p){
 // <<<<<<< codex/create-game-board-structure-and-rules
     el.style.backgroundColor = PAWN_COLORS[idx % PAWN_COLORS.length];
     document.getElementById('board').appendChild(el);
-=======
+//=======
 //>>>>>>> main
   }
   return el;
@@ -769,6 +899,79 @@ async function animateDie(){
   state.lastRoll = n;
   return n;
 }
+//<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
+async function roll(player){
+  if(!player) return 0;
+  dieEl.textContent='…';
+  let c=0;
+  await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
+  const n = 1 + Math.floor(Math.random()*6);
+  dieEl.textContent=n;
+  await moveSteps(player,n);
+  return n;
+}
+
+async function resolveTile(player){
+  if(!player || player.pos <= 0 || !window.QuestionBank){
+    return { extraTurn:false };
+  }
+  const { level, question } = QuestionBank.getQuestionForPosition(player.pos, state?.usedQuestionIds);
+  if(!question){
+    return { extraTurn:false };
+  }
+  const store = state?.usedQuestionIds?.[level];
+  if(Array.isArray(store) && !store.includes(question.id)){
+    store.push(question.id);
+  }
+  const result = await showQuestionModal(question, level);
+  if(result.outcome === 'correct'){
+    appendLog(`${player.name} acierta la pregunta de nivel ${level}. Gana un turno extra.`);
+    updateTurnInfo();
+    return { extraTurn:true };
+  }
+  if(result.outcome === 'wrong'){
+    player.skipTurns = Math.max(player.skipTurns || 0, 1);
+    appendLog(`${player.name} falla la pregunta de nivel ${level}. Pierde un turno.`);
+    updateTurnInfo();
+  }
+  return { extraTurn:false };
+}
+
+function advanceTurn(){
+  if(!state || !Array.isArray(state.players) || !state.players.length) return;
+  state.currentIdx = (state.currentIdx + 1) % state.players.length;
+  updateTurnInfo();
+}
+
+async function takeTurn(){
+  if(!state || btnRoll.disabled) return;
+  const player = state.players[state.currentIdx];
+  if(!player) return;
+  if(player.skipTurns && player.skipTurns > 0){
+    player.skipTurns -= 1;
+    const reminder = player.skipTurns > 0 ? ` Quedan ${player.skipTurns} turno${player.skipTurns === 1 ? '' : 's'} de penalización.` : ' Puede volver a tirar en su siguiente turno.';
+    appendLog(`${player.name} pierde el turno por penalización.${reminder}`);
+    advanceTurn();
+    return;
+  }
+  btnRoll.disabled = true;
+  let extraTurn = false;
+  try{
+    const rolled = await roll(player);
+    const plural = rolled === 1 ? '' : 's';
+    appendLog(`${player.name} avanza ${rolled} casilla${plural} hasta ${describePosition(player.pos, true)}.`);
+    const resolution = await resolveTile(player);
+    extraTurn = !!resolution.extraTurn;
+  }finally{
+    btnRoll.disabled = false;
+  }
+  if(extraTurn){
+    appendLog(`${player.name} conserva el turno.`);
+    updateTurnInfo();
+  }else{
+    advanceTurn();
+  }
+//=======
 
 function nextPlayerIndex(){
   if(!state || state.players.length<=1) return state?.currentIdx ?? 0;
@@ -957,6 +1160,7 @@ function advanceTurn(){
     break;
   }while(attempts < len * 2);
   updateTurnInfo();
+//>>>>>>> main
 }
 
 function updateTurnInfo(){
@@ -1357,6 +1561,13 @@ function setupMenu(){
   setupMenu();
 //=======
   ok('BOARD_COORDS == LAYOUT', (window.BOARD_COORDS||[]).length===LAYOUT.length);
+//<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
+  // pos 0 -> start_pad
+  state={players:[{id:'1',name:'J1',pos:0,skipTurns:0}],currentIdx:0,mode:'solo',usedQuestionIds:{1:[],2:[],3:[]},log:[]};
+  placePawn(state.players[0]);
+  ok('Jugador inicia en pos 0 (start_pad)', state.players[0].pos===0);
+  // overlay toggle
+//=======
   const colorB = COLOR_PALETTE[1]?.id || COLOR_PALETTE[0].id;
   state = { players:[
     {id:'T1', name:'P1', pos:0, color:COLOR_PALETTE[0].id, type:'human', skipTurns:0},
@@ -1372,6 +1583,7 @@ function setupMenu(){
   ok('Mover peón actualiza la posición', state.players[1].pos === 5);
   let threw=false; try{ placePawn({id:'X',name:'X',pos:-999,color:COLOR_PALETTE[0].id}); }catch(e){ threw=true; }
   ok('placePawn fuera de rango no lanza', !threw);
+//>>>>>>> main
   const svg=document.getElementById('boardSvg'); overlayOn=true; drawOverlay(svg);
   ok('Overlay creado', !!document.getElementById('overlay'));
   overlayOn=false; drawOverlay(svg); ok('Overlay oculto', !document.getElementById('overlay'));
@@ -1387,6 +1599,33 @@ function setupMenu(){
 
 // ===== Arranque UI (1 jugador, pos 0) =====
 (function init(){
+//<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
+  playersSetup.innerHTML = `<div class="player-card"><strong>Jugador 1</strong><div class="small">Índice base 0</div></div>`;
+
+  btnStart.onclick = ()=>{
+    const mode = document.querySelector('input[name="mode"]:checked')?.value || 'solo';
+    state = {
+      players:[{id:'1', name:'J1', pos:0, skipTurns:0}],
+      currentIdx:0,
+      mode,
+      usedQuestionIds:{1:[],2:[],3:[]},
+      log:[]
+    };
+    logEl.innerHTML='';
+    menuEl.style.display='none';
+    gameEl.style.display='grid';
+    renderBoard();
+    placePawn(state.players[0]);
+    dieEl.textContent='—';
+    btnRoll.disabled = false;
+    appendLog('Partida iniciada.');
+    updateTurnInfo();
+  };
+  btnRoll.onclick = takeTurn;
+  btnTests.onclick = runTests;
+  btnRoll.disabled = true;
+  updateTurnInfo();
+//=======
   playersSetupEl = document.getElementById('playersSetup');
   btnRoll = document.getElementById('btnRoll');
   dieEl = document.getElementById('die');
@@ -1530,6 +1769,7 @@ function setupMenu(){
   })();
 // >>>>>>> main
 // >>>>>>> main
+///>>>>>>> main
 })();
 </script>
 </body>
