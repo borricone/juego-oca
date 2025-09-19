@@ -217,6 +217,10 @@ const DEFAULT_COLOR = COLOR_PALETTE[0].id;
 const SPRITE_LIBRARY = Object.fromEntries(COLOR_PALETTE.map(c=>[c.id, makeSpriteSet(c)]));
 const rnd = (max, min=1) => min + Math.floor((crypto.getRandomValues?.(new Uint32Array(1))[0] ?? Math.random()*2**32) / 2**32 * (max-min+1));
 
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+const STORAGE_KEY = 'ocaGameState';
+const STORAGE_VERSION = 1;
+//=======
 function makeSpriteSet(spec){
   const walkFrames = [
     {body:-1,left:2,right:-2,tilt:-1},
@@ -264,6 +268,7 @@ function escapeHtml(str){
   map["'"] = '&#39;';
   return String(str ?? '').replace(/[&<>"']/g, ch=>map[ch]);
 }
+//>>>>>>> main
 
 // ===== Orden exacto del tablero =====
 //>>>>>>> main
@@ -422,6 +427,127 @@ const GamePhase = Object.freeze({
 let state = null;
 //>>>>>>> main
 let overlayOn = false;
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+let storedStateCache = null;
+
+function getLocalStorage(){
+  try{
+    return window.localStorage;
+  }catch(e){
+    console.warn('localStorage no disponible', e);
+    return null;
+  }
+}
+
+function createInitialState(seed=null){
+  return {
+    players:[{id:'1', name:'J1', pos:0, skipTurns:0}],
+    currentIdx:0,
+    history:[],
+    usedQuestionIds:[],
+    rngSeed: seed ?? null
+  };
+}
+
+function normalizePlayers(list){
+  if(!Array.isArray(list) || !list.length){
+    return createInitialState().players;
+  }
+  return list.map((p,i)=>({
+    id: String(p?.id ?? (i+1)),
+    name: String(p?.name ?? `J${i+1}`),
+    pos: Number.isFinite(p?.pos) ? p.pos : 0,
+    skipTurns: Number.isFinite(p?.skipTurns) ? p.skipTurns : 0
+  }));
+}
+
+function hydrateState(raw){
+  const seed = raw?.rngSeed ?? null;
+  const base = createInitialState(seed);
+  base.players = normalizePlayers(raw?.players);
+  const maxIdx = Math.max(0, base.players.length - 1);
+  const idx = Number.isFinite(raw?.currentIdx) ? raw.currentIdx : 0;
+  base.currentIdx = Math.min(Math.max(0, idx), maxIdx);
+  base.history = Array.isArray(raw?.history) ? raw.history.map(String) : [];
+  base.usedQuestionIds = Array.isArray(raw?.usedQuestionIds) ? raw.usedQuestionIds.map(String) : [];
+  return base;
+}
+
+function getSerializableState(s){
+  if(!s) return null;
+  return {
+    players: Array.isArray(s.players) ? s.players.map(p=>({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      skipTurns: p.skipTurns ?? 0
+    })) : [],
+    currentIdx: s.currentIdx ?? 0,
+    history: Array.isArray(s.history) ? [...s.history] : [],
+    usedQuestionIds: Array.isArray(s.usedQuestionIds) ? [...s.usedQuestionIds] : [],
+    rngSeed: s.rngSeed ?? null
+  };
+}
+
+function updateContinueButton(){
+  const btn = document.getElementById('btnContinue');
+  if(!btn) return;
+  btn.style.display = storedStateCache ? 'inline-flex' : 'none';
+}
+
+function wipeSave(){
+  const ls = getLocalStorage();
+  if(ls){
+    try{ ls.removeItem(STORAGE_KEY); }catch(e){ console.warn('No se pudo borrar el guardado', e); }
+  }
+  storedStateCache = null;
+  updateContinueButton();
+}
+
+function readStoredState(){
+  const ls = getLocalStorage();
+  if(!ls) return null;
+  const raw = ls.getItem(STORAGE_KEY);
+  if(!raw) return null;
+  try{
+    const parsed = JSON.parse(raw);
+    if(parsed?.version !== STORAGE_VERSION || typeof parsed.state !== 'object' || parsed.state===null){
+      wipeSave();
+      return null;
+    }
+    return parsed.state;
+  }catch(e){
+    console.warn('Guardado corrupto, se limpia', e);
+    wipeSave();
+    return null;
+  }
+}
+
+function refreshStoredStateCache(){
+  storedStateCache = readStoredState();
+  updateContinueButton();
+}
+
+function persistState(){
+  if(!state) return;
+  const ls = getLocalStorage();
+  if(!ls) return;
+  const serializable = getSerializableState(state);
+  try{
+    ls.setItem(STORAGE_KEY, JSON.stringify({version:STORAGE_VERSION, state:serializable}));
+    storedStateCache = serializable;
+    updateContinueButton();
+  }catch(e){
+    console.warn('No se pudo guardar la partida', e);
+  }
+}
+
+function loadStoredState(){
+  if(!storedStateCache){
+    storedStateCache = readStoredState();
+  }
+  return storedStateCache ? hydrateState(storedStateCache) : null;
+//=======
 let layoutCoords = {};
 let boardGeometry = [];
 
@@ -544,6 +670,7 @@ function updateTurnInfo(){
   }else{
     turnInfoEl.textContent = base;
   }
+//>>>>>>> main
 }
 
 // ===== Helpers SVG =====
@@ -759,11 +886,62 @@ function drawOverlay(svg){
   }
 });
 
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+function renderHistoryFromState(){
+  const logEl = document.getElementById('log');
+  if(!logEl) return;
+  logEl.innerHTML = '';
+  const entries = Array.isArray(state?.history) ? state.history : [];
+  entries.forEach(text=>{
+    const item = document.createElement('div');
+    item.textContent = text;
+    logEl.appendChild(item);
+  });
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function announce(msg){
+  const live = document.getElementById('live');
+  if(live){ live.textContent = msg; }
+}
+
+function addHistoryEntry(text){
+  if(!state) return;
+  if(!Array.isArray(state.history)) state.history = [];
+  state.history.push(text);
+  renderHistoryFromState();
+  announce(text);
+  persistState();
+}
+
+function markQuestionUsed(id){
+  if(!state || id===undefined || id===null) return;
+  if(!Array.isArray(state.usedQuestionIds)) state.usedQuestionIds = [];
+  const key = String(id);
+  if(state.usedQuestionIds.includes(key)) return;
+  state.usedQuestionIds.push(key);
+  persistState();
+}
+
+function updateHud(){
+  const turnInfo = document.getElementById('turnInfo');
+  if(!turnInfo) return;
+  if(!state || !Array.isArray(state.players) || !state.players.length){
+    turnInfo.textContent = '—';
+    return;
+  }
+  const idx = Math.min(Math.max(0, state.currentIdx ?? 0), state.players.length-1);
+  const current = state.players[idx];
+  turnInfo.textContent = `${current.name} (casilla ${current.pos})`;
+}
+
+//=======
 // ===== Movimiento de peones =====
 function ensurePawnElement(p, idx){
 //=======
 
 // <<<<<<< codex/add-player-setup-for-human-players
+//>>>>>>> main
 // ===== Peones (pos 0 -> start_pad) =====
 function getSpriteForColor(color){
   return SPRITE_LIBRARY[color] || SPRITE_LIBRARY[DEFAULT_COLOR];
@@ -808,6 +986,15 @@ function ensurePawnElement(p){
   return el;
 }
 
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+function refreshPawns(){
+  document.querySelectorAll('.pawn').forEach(el=>el.remove());
+  if(!state || !Array.isArray(state.players)) return;
+  state.players.forEach(placePawn);
+}
+
+function startWalk(el){ if(!el) return; clearInterval(el._timer); let f=0; el._timer=setInterval(()=>{ el.style.backgroundPosition = `-${f*SPRITE_PAWN_SIZE}px 0`; f=(f+1)%SPRITE_FRAMES; }, 1000/SPRITE_FPS_WALK); }
+//=======
 // <<<<<<< codex/create-game-board-structure-and-rules
 function placePawn(p, idx=0){
   if(!boardGeometry.length) return;
@@ -818,6 +1005,7 @@ function placePawn(p, idx=0){
 }
 
 function startWalk(el){ if(!el) return; clearInterval(el._timer); let f=0; el._timer=setInterval(()=>{ el.style.backgroundPosition = `-${f*SPRITE_PAWN_SIZE}px 0`; f=(f+1)%Math.max(1,SPRITE_FRAMES); }, 1000/SPRITE_FPS_WALK); }
+//>>>>>>> main
 function stopWalk(el){ if(el&&el._timer) clearInterval(el._timer); }
 
 async function travelTo(p, targetIdx, pawnIdx){
@@ -1124,6 +1312,33 @@ async function moveSteps(p, steps){
   layoutPawns();
 }
 
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+function showGameScreen(){
+  document.getElementById('menu').style.display='none';
+  const game=document.getElementById('game');
+  game.style.display='grid';
+  renderBoard();
+  refreshPawns();
+  renderHistoryFromState();
+  updateHud();
+  const dieEl=document.getElementById('die');
+  if(dieEl) dieEl.textContent='—';
+}
+async function roll(){
+  if(!state || !Array.isArray(state.players) || !state.players.length) return;
+  const idx = Math.min(Math.max(0, state.currentIdx ?? 0), state.players.length-1);
+  const p = state.players[idx];
+  const dieEl = document.getElementById('die');
+  if(!dieEl) return;
+  dieEl.textContent='…';
+  let c=0;
+  await new Promise(res=>{ const t=setInterval(()=>{ dieEl.textContent = 1 + (c%6); if(++c>10){ clearInterval(t); res(); } },70); });
+  const n = 1 + Math.floor(Math.random()*6); dieEl.textContent=n;
+  await moveSteps(p,n);
+  const msg = `${p.name} avanza ${n} ${n===1?'casilla':'casillas'}.`;
+  addHistoryEntry(msg);
+  updateHud();
+//=======
 async function roll(){
   if(isRolling || !state?.players?.length) return;
   const p = state.players[state.currentIdx];
@@ -1210,6 +1425,7 @@ function createSetupPlayer(type){
   player.name = defaultName(type);
   player.color = pickColor(undefined, player.id);
   return player;
+//>>>>>>> main
 }
 
 function ensurePlayersForMode(){
@@ -1563,8 +1779,12 @@ function setupMenu(){
   ok('BOARD_COORDS == LAYOUT', (window.BOARD_COORDS||[]).length===LAYOUT.length);
 //<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
   // pos 0 -> start_pad
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+  state=createInitialState(); placePawn(state.players[0]);
+//=======
   state={players:[{id:'1',name:'J1',pos:0,skipTurns:0}],currentIdx:0,mode:'solo',usedQuestionIds:{1:[],2:[],3:[]},log:[]};
   placePawn(state.players[0]);
+//>>>>>>> main
   ok('Jugador inicia en pos 0 (start_pad)', state.players[0].pos===0);
   // overlay toggle
 //=======
@@ -1602,6 +1822,42 @@ function setupMenu(){
 //<<<<<<< codex/crear-questions.js-con-preguntas-y-funciones
   playersSetup.innerHTML = `<div class="player-card"><strong>Jugador 1</strong><div class="small">Índice base 0</div></div>`;
 
+//<<<<<<< codex/implementar-guardado-y-carga-de-gamestate
+  const btnStart = document.getElementById('btnStart');
+  const btnContinue = document.getElementById('btnContinue');
+  const btnWipe = document.getElementById('btnWipe');
+  const btnRoll  = document.getElementById('btnRoll');
+  const btnTests = document.getElementById('btnTests');
+  const seedInput = document.getElementById('seed');
+
+  refreshStoredStateCache();
+
+  btnStart.onclick = ()=>{
+    const seedVal = (seedInput?.value || '').trim();
+    state = createInitialState(seedVal || null);
+    showGameScreen();
+    persistState();
+    const startMsg = seedVal ? `Nueva partida iniciada (semilla ${seedVal}).` : 'Nueva partida iniciada.';
+    addHistoryEntry(startMsg);
+  };
+  if(btnContinue){
+    btnContinue.onclick = ()=>{
+      const loaded = loadStoredState();
+      if(!loaded) return;
+      state = loaded;
+      showGameScreen();
+      persistState();
+      announce('Partida cargada.');
+    };
+  }
+  if(btnWipe){
+    btnWipe.onclick = ()=>{
+      wipeSave();
+      announce('Guardado eliminado.');
+    };
+  }
+  btnRoll.onclick = roll;
+//=======
   btnStart.onclick = ()=>{
     const mode = document.querySelector('input[name="mode"]:checked')?.value || 'solo';
     state = {
@@ -1622,6 +1878,7 @@ function setupMenu(){
     updateTurnInfo();
   };
   btnRoll.onclick = takeTurn;
+//>>>>>>> main
   btnTests.onclick = runTests;
   btnRoll.disabled = true;
   updateTurnInfo();
